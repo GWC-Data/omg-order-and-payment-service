@@ -1,0 +1,19 @@
+CapturePaymentRequest:
+  type: object
+  required:
+    - paymentId
+  properties:
+    paymentId:
+      type: string
+      description: Razorpay payment ID to capture.
+    amount:
+      type: number
+      format: float
+      description: Amount in major currency units. Defaults to the original order total.
+    currency:
+      type: string
+      description: ISO currency code. Defaults to the order currency.
+
+
+
+

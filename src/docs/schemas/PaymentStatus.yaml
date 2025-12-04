@@ -1,0 +1,12 @@
+PaymentStatus:
+  type: string
+  enum:
+    - created
+    - authorized
+    - paid
+    - captured
+    - failed
+    - refunded
+
+
+

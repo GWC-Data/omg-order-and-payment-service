@@ -1,0 +1,53 @@
+openapi: 3.0.0
+info:
+  title: OMG Payment Microservice
+  version: 1.0.0
+  description: Endpoints that orchestrate Razorpay orders, captures, and webhooks.
+servers:
+  - url: http://localhost:5050/
+    description: Local Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      $ref: './schemas/Error.yaml#/Error'
+    PaymentOrder:
+      $ref: './schemas/PaymentOrder.yaml#/PaymentOrder'
+    PaymentStatus:
+      $ref: './schemas/PaymentStatus.yaml#/PaymentStatus'
+    CreatePaymentOrderRequest:
+      $ref: './schemas/CreatePaymentOrderRequest.yaml#/CreatePaymentOrderRequest'
+    VerifyPaymentRequest:
+      $ref: './schemas/VerifyPaymentRequest.yaml#/VerifyPaymentRequest'
+    CapturePaymentRequest:
+      $ref: './schemas/CapturePaymentRequest.yaml#/CapturePaymentRequest'
+  responses:
+    BadRequest:
+      description: Invalid request payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RazorpayError:
+      description: Razorpay rejected the operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

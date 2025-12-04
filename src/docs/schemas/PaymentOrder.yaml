@@ -1,0 +1,55 @@
+PaymentOrder:
+  type: object
+  properties:
+    id:
+      type: integer
+    userId:
+      type: string
+    razorpayOrderId:
+      type: string
+    razorpayPaymentId:
+      type: string
+      nullable: true
+    status:
+      $ref: '#/components/schemas/PaymentStatus'
+    amount:
+      type: integer
+      description: Amount stored in the smallest currency unit (paise).
+    currency:
+      type: string
+    receipt:
+      type: string
+      nullable: true
+    notes:
+      type: object
+      additionalProperties: true
+      nullable: true
+    metadata:
+      type: object
+      additionalProperties: true
+      nullable: true
+    customerEmail:
+      type: string
+      nullable: true
+    customerPhone:
+      type: string
+      nullable: true
+    capturedAt:
+      type: string
+      format: date-time
+      nullable: true
+    expiresAt:
+      type: string
+      format: date-time
+      nullable: true
+    failureReason:
+      type: string
+      nullable: true
+    createdAt:
+      type: string
+      format: date-time
+    updatedAt:
+      type: string
+      format: date-time
+
+

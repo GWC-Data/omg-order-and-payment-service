@@ -1,0 +1,39 @@
+CreatePaymentOrderRequest:
+  type: object
+  required:
+    - amount
+    - userId
+  properties:
+    amount:
+      type: number
+      format: float
+      description: Amount in the major currency unit (e.g., rupees).
+      example: 499.99
+    userId:
+      type: string
+      description: Identifier of the user/customer that owns this payment order.
+      example: user_123
+    currency:
+      type: string
+      description: ISO currency code, defaults to INR.
+      example: INR
+    receipt:
+      type: string
+      example: order_123
+    autoCapture:
+      type: boolean
+      default: false
+    customerEmail:
+      type: string
+      format: email
+    customerPhone:
+      type: string
+    notes:
+      type: object
+      additionalProperties:
+        type: string
+    metadata:
+      type: object
+      additionalProperties: true
+
+

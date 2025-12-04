@@ -1,0 +1,8 @@
+openapi: 3.0.0
+info:
+  title: OMG Payment Microservice
+  description: Documentation bundle for the OMG Razorpay integration service.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5050/
+    description: Local Server

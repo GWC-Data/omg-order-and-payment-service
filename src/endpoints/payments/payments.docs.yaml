@@ -1,0 +1,174 @@
+/payments/orders:
+  post:
+    summary: Create Razorpay order
+    description: Creates a Razorpay order and persists metadata for reconciliation.
+    operationId: createPaymentOrder
+    tags:
+      - Payments
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CreatePaymentOrderRequest'
+    responses:
+      '201':
+        description: Payment order created
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                order:
+                  type: object
+                record:
+                  $ref: '#/components/schemas/PaymentOrder'
+      '502':
+        $ref: '#/components/responses/RazorpayError'
+
+  get:
+    summary: List payment orders
+    description: Returns a paginated list of persisted Razorpay orders.
+    operationId: listPaymentOrders
+    tags:
+      - Payments
+    parameters:
+      - name: userId
+        in: query
+        schema:
+          type: string
+        description: Filter orders belonging to a specific user/customer.
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/PaymentStatus'
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          default: 25
+    responses:
+      '200':
+        description: Paginated payment orders
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PaymentOrder'
+                page:
+                  type: integer
+                pageSize:
+                  type: integer
+                total:
+                  type: integer
+      '500':
+        $ref: '#/components/responses/ServerError'
+
+/payments/orders/{orderId}:
+  get:
+    summary: Fetch payment order details
+    description: Returns the local and Razorpay view of an order.
+    operationId: getPaymentOrder
+    tags:
+      - Payments
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Payment order metadata and live Razorpay payloads.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                record:
+                  $ref: '#/components/schemas/PaymentOrder'
+                remoteOrder:
+                  type: object
+                payments:
+                  type: object
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '502':
+        $ref: '#/components/responses/RazorpayError'
+
+/payments/verify:
+  post:
+    summary: Verify Razorpay payment signature
+    description: >
+      Performs server-side HMAC verification after the client posts Razorpay IDs.
+    operationId: verifyPaymentSignature
+    tags:
+      - Payments
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VerifyPaymentRequest'
+    responses:
+      '200':
+        description: Signature verified
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                order:
+                  $ref: '#/components/schemas/PaymentOrder'
+      '400':
+        $ref: '#/components/responses/BadRequest'
+      '404':
+        $ref: '#/components/responses/NotFound'
+
+/payments/capture:
+  post:
+    summary: Capture an authorized Razorpay payment
+    description: Captures a previously authorized payment and updates the local ledger.
+    operationId: capturePayment
+    tags:
+      - Payments
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CapturePaymentRequest'
+    responses:
+      '200':
+        description: Payment captured
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                capture:
+                  type: object
+                order:
+                  $ref: '#/components/schemas/PaymentOrder'
+      '400':
+        $ref: '#/components/responses/BadRequest'
+      '502':
+        $ref: '#/components/responses/RazorpayError'
+
+
+
