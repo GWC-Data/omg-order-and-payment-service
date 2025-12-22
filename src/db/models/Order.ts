@@ -1,4 +1,4 @@
-import { Table, Column, Model, DataType, Index } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, Index, PrimaryKey, Default } from 'sequelize-typescript';
 
 export type OrderType = 'darshan' | 'puja' | 'prasad' | 'product';
 
@@ -19,7 +19,16 @@ export type OrderPaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 @Table({ tableName: 'Orders', timestamps: true })
 export class Order extends Model {
 
+  @PrimaryKey
+  @Default(DataType.UUIDV4)
+  @Column({
+    type: DataType.UUID,
+    allowNull: false
+  })
+  id!: string;
+
   @Index
+  @Default(DataType.UUIDV4)
   @Column({
     type: DataType.UUID,
     allowNull: false,

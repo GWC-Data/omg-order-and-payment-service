@@ -29,6 +29,7 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async 
   res: Response
 ) => {
   try {
+    console.log(req,"req");
     const order = await Order.create({
       userId: req.body.userId,
       templeId: req.body.templeId,
