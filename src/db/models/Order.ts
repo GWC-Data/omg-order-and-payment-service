@@ -18,19 +18,12 @@ export type OrderPaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 
 @Table({ tableName: 'Orders', timestamps: true })
 export class Order extends Model {
-  @Column({
-    type: DataType.UUID,
-    primaryKey: true,
-    defaultValue: DataType.UUIDV4
-  })
-  declare id: string;
 
   @Index
   @Column({
     type: DataType.UUID,
     allowNull: false,
     unique: true,
-    defaultValue: DataType.UUIDV4
   })
   orderNumber!: string;
 

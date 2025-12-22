@@ -2,12 +2,6 @@ import { Table, Column, Model, DataType, Index } from 'sequelize-typescript';
 
 @Table({ tableName: 'OrderStatusHistories', timestamps: true })
 export class OrderStatusHistory extends Model {
-  @Column({
-    type: DataType.UUID,
-    primaryKey: true,
-    defaultValue: DataType.UUIDV4
-  })
-  declare id: string;
 
   @Index
   @Column({ type: DataType.UUID, allowNull: false })

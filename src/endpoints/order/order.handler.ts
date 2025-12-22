@@ -24,8 +24,8 @@ import {
 /**
  * Create Order
  */
-export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
-  req: EndpointRequestType[EndpointAuthType.JWT],
+export const createOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async (
+  req: EndpointRequestType[EndpointAuthType.NONE],
   res: Response
 ) => {
   try {
@@ -69,8 +69,8 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
 /**
  * Get Order by Id
  */
-export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.JWT> = async (
-  req: EndpointRequestType[EndpointAuthType.JWT],
+export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.NONE> = async (
+  req: EndpointRequestType[EndpointAuthType.NONE],
   res: Response
 ) => {
   try {
@@ -90,8 +90,8 @@ export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.JWT> = async 
 /**
  * Get All Orders (basic filtering + pagination)
  */
-export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.JWT> = async (
-  req: EndpointRequestType[EndpointAuthType.JWT],
+export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.NONE> = async (
+  req: EndpointRequestType[EndpointAuthType.NONE],
   res: Response
 ) => {
   try {
@@ -138,8 +138,8 @@ export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.JWT> = async 
 /**
  * Update Order
  */
-export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
-  req: EndpointRequestType[EndpointAuthType.JWT],
+export const updateOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async (
+  req: EndpointRequestType[EndpointAuthType.NONE],
   res: Response
 ) => {
   try {
@@ -189,8 +189,8 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
 /**
  * Delete Order
  */
-export const deleteOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
-  req: EndpointRequestType[EndpointAuthType.JWT],
+export const deleteOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async (
+  req: EndpointRequestType[EndpointAuthType.NONE],
   res: Response
 ) => {
   try {

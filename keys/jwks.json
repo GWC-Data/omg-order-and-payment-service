@@ -2,10 +2,10 @@
   "keys": [
     {
       "kty": "EC",
-      "x": "jtHDMRbvMpY7DPSJnBYwHE8nFTfBPr1sU-oJ32bGwPU",
-      "y": "s5IgVM51t9YGlG4XaXfs_idbsAzQ8VHab_kX5EIyCzU",
+      "x": "edBwx7k_vLnzNIANvNlTYMivUJ5Gu2nX5FPG3NXJU-k",
+      "y": "XotqGthMWNme7JBGEKYHRfRNJGtGOmDVuckuKhjSAcM",
       "crv": "P-256",
-      "kid": "sW2cSBF4O3hQboMBGKOmvGnCMlqdeIuR8ZjJdjFdW8Y",
+      "kid": "7rtYBR9u_EkP2KVv3igAD0WjzhPsAnH_qrd5esseq8E",
       "alg": "ES256",
       "use": "sig"
     }

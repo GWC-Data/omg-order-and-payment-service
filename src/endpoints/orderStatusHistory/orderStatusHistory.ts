@@ -16,7 +16,7 @@ export const createOrderStatusHistoryEndpoint = new Endpoint({
   path: '/orders/:orderId/status-history',
   method: EndpointMethod.POST,
   handler: createOrderStatusHistoryHandler,
-  authType: EndpointAuthType.JWT,
+  authType: EndpointAuthType.NONE,
   validator: createOrderStatusHistoryValidator
 });
 
@@ -24,7 +24,7 @@ export const getAllOrderStatusHistoryEndpoint = new Endpoint({
   path: '/orders/:orderId/status-history',
   method: EndpointMethod.GET,
   handler: getAllOrderStatusHistoryHandler,
-  authType: EndpointAuthType.JWT,
+  authType: EndpointAuthType.NONE,
   validator: {}
 });
 
@@ -32,7 +32,7 @@ export const getOrderStatusHistoryByIdEndpoint = new Endpoint({
   path: '/orders/:orderId/status-history/:id',
   method: EndpointMethod.GET,
   handler: getOrderStatusHistoryByIdHandler,
-  authType: EndpointAuthType.JWT,
+  authType: EndpointAuthType.NONE,
   validator: getOrderStatusHistoryByIdValidator
 });
 
@@ -40,7 +40,7 @@ export const deleteOrderStatusHistoryEndpoint = new Endpoint({
   path: '/orders/:orderId/status-history/:id',
   method: EndpointMethod.DELETE,
   handler: deleteOrderStatusHistoryHandler,
-  authType: EndpointAuthType.JWT,
+  authType: EndpointAuthType.NONE,
   validator: getOrderStatusHistoryByIdValidator
 });
 
