@@ -1,0 +1,108 @@
+/orders/{orderId}/status-history:
+  post:
+    summary: Create order status history record
+    operationId: createOrderStatusHistory
+    tags:
+      - OrderStatusHistory
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - status
+            properties:
+              status: { type: string }
+              previousStatus: { type: string }
+              notes: { type: string }
+              location: { type: string }
+    responses:
+      '201':
+        description: Order status history created successfully
+      '401':
+        description: Unauthorized
+      '500':
+        description: Server error
+
+  get:
+    summary: List order status history for an order
+    operationId: getAllOrderStatusHistory
+    tags:
+      - OrderStatusHistory
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    responses:
+      '200':
+        description: Order status history fetched successfully
+      '401':
+        description: Unauthorized
+      '500':
+        description: Server error
+
+/orders/{orderId}/status-history/{id}:
+  get:
+    summary: Get order status history record by id
+    operationId: getOrderStatusHistoryById
+    tags:
+      - OrderStatusHistory
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    responses:
+      '200':
+        description: Order status history record fetched successfully
+      '404':
+        description: Not found
+      '401':
+        description: Unauthorized
+      '500':
+        description: Server error
+
+  delete:
+    summary: Delete order status history record
+    operationId: deleteOrderStatusHistory
+    tags:
+      - OrderStatusHistory
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    responses:
+      '200':
+        description: Order status history record deleted successfully
+      '404':
+        description: Not found
+      '401':
+        description: Unauthorized
+      '500':
+        description: Server error
+
+
