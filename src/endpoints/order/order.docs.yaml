@@ -19,6 +19,7 @@
             properties:
               userId: { type: string, format: uuid }
               templeId: { type: string, format: uuid }
+              addressId: { type: string, format: uuid }
               orderType:
                 type: string
                 enum: [darshan, puja, prasad, product]

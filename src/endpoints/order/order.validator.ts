@@ -11,6 +11,11 @@ export const createOrderValidator: Schema = {
     exists: { errorMessage: 'Temple ID is required' },
     isUUID: { errorMessage: 'Temple ID must be a valid UUID' }
   },
+  addressId: {
+    in: 'body',
+    optional: true,
+    isUUID: { errorMessage: 'addressId must be a valid UUID' }
+  },
   orderType: {
     in: 'body',
     exists: { errorMessage: 'Order type is required' },
@@ -71,6 +76,11 @@ export const createOrderValidator: Schema = {
 };
 
 export const updateOrderValidator: Schema = {
+  addressId: {
+    in: 'body',
+    optional: true,
+    isUUID: { errorMessage: 'addressId must be a valid UUID' }
+  },
   orderType: {
     in: 'body',
     optional: true,

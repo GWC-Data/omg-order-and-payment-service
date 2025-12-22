@@ -50,6 +50,13 @@ export class Order extends Model {
   })
   templeId!: string;
 
+  @Index
+  @Column({
+    type: DataType.UUID,
+    allowNull: true
+  })
+  addressId?: string;
+
   @Column({
     type: DataType.ENUM('darshan', 'puja', 'prasad', 'product'),
     allowNull: false

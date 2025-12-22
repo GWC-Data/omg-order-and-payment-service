@@ -33,6 +33,7 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async 
     const order = await Order.create({
       userId: req.body.userId,
       templeId: req.body.templeId,
+      addressId: req.body.addressId,
       orderType: req.body.orderType,
       status: req.body.status ?? 'pending',
       scheduledDate: req.body.scheduledDate,
@@ -153,6 +154,7 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async 
     await order.update({
       userId: req.body.userId ?? order.userId,
       templeId: req.body.templeId ?? order.templeId,
+      addressId: req.body.addressId ?? (order as any).addressId,
       orderType: req.body.orderType ?? order.orderType,
       status: req.body.status ?? order.status,
       scheduledDate: req.body.scheduledDate ?? order.scheduledDate,
