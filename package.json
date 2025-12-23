@@ -4,8 +4,9 @@
   "description": "OMG payment microservice with first-class Razorpay integration.",
   "main": "dist/index.js",
   "scripts": {
+    "dev": "nodemon",
     "start": "node -r ./dist/env/config.js ./dist/index.js",
-    "build": "rimraf dist && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && npx babel src --out-dir dist --source-maps --extensions \".ts\" --ignore \"**/*.test.ts\" --copy-files --no-copy-ignored && cp -r env dist/",
+    "build": "rimraf dist && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && npx babel src --out-dir dist --source-maps --extensions \".ts\" --ignore \"**/*.test.ts\" --copy-files --no-copy-ignored && copyfiles -u 1 env/**/* dist/",
     "test": "cross-env NODE_ENV=test nyc mocha test/hooks.ts \"src/**/*.test.ts\"",
     "coverage": "nyc report --report-dir=./test-coverage --reporter=html --reporter=text",
     "coverage:ci": "nyc report --reporter=text-summary",
@@ -79,6 +80,7 @@
     "babel-plugin-module-resolver": "^5.0.2",
     "chai": "^4.5.0",
     "chai-as-promised": "^7.1.2",
+    "copyfiles": "^2.4.1",
     "cross-env": "^7.0.3",
     "dotenv": "^16.4.7",
     "eslint": "^9.17.0",
