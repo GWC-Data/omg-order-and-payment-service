@@ -5,6 +5,7 @@ import {
   reportError
 } from 'node-server-engine';
 import { Response } from 'express';
+import { randomUUID } from 'crypto';
 import { Op, WhereOptions } from 'sequelize';
 import { Order } from 'db/models';
 import { sendErrorResponse, sendSuccessResponse } from 'utils/responseUtils';
@@ -31,6 +32,8 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async 
   try {
     console.log(req,"req");
     const order = await Order.create({
+      // Ensure orderNumber is always set (model may not define a default).
+      orderNumber: randomUUID(),
       userId: req.body.userId,
       templeId: req.body.templeId,
       addressId: req.body.addressId,

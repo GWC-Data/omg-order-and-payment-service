@@ -5,6 +5,7 @@ import {
   reportError
 } from 'node-server-engine';
 import { Response } from 'express';
+import { randomUUID } from 'crypto';
 import { OrderItem } from 'db/models';
 import { sendErrorResponse, sendSuccessResponse } from 'utils/responseUtils';
 import {
@@ -29,6 +30,8 @@ export const createOrderItemHandler: EndpointHandler<EndpointAuthType.NONE> = as
 ) => {
   try {
     const orderItem = await OrderItem.create({
+      // Some environments don't end up with a DB-side UUID default; generate it here to avoid NULL id inserts.
+      id: randomUUID(),
       orderId: req.params.orderId,
       itemType: req.body.itemType,
       itemId: req.body.itemId,

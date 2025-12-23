@@ -5,6 +5,7 @@ import {
   reportError
 } from 'node-server-engine';
 import { Response } from 'express';
+import { randomUUID } from 'crypto';
 import { OrderStatusHistory } from 'db/models';
 import { sendErrorResponse, sendSuccessResponse } from 'utils/responseUtils';
 import {
@@ -27,6 +28,8 @@ export const createOrderStatusHistoryHandler: EndpointHandler<EndpointAuthType.N
 ) => {
   try {
     const record = await OrderStatusHistory.create({
+      // Some environments don't end up with a DB-side UUID default; generate it here to avoid NULL id inserts.
+      id: randomUUID(),
       orderId: req.params.orderId,
       status: req.body.status,
       previousStatus: req.body.previousStatus,
