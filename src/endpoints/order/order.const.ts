@@ -8,5 +8,7 @@ export const ORDER_UPDATE_ERROR = 'Error updating order';
 export const ORDER_DELETED_SUCCESS = 'Order deleted successfully';
 export const ORDER_DELETE_ERROR = 'Error deleting order';
 export const ORDER_NOT_FOUND = 'Order not found';
+export const ORDER_DETAILS_FETCH_SUCCESS = 'Order details fetched successfully';
+export const ORDER_DETAILS_FETCH_ERROR = 'Error fetching order details';
 
 

@@ -4,11 +4,12 @@ import {
   createOrderHandler,
   deleteOrderHandler,
   getAllOrdersHandler,
+  getOrderDetailsHandler,
   getOrderByIdHandler,
   updateOrderHandler
 } from './order.handler';
 
-import { createOrderValidator, updateOrderValidator } from './order.validator';
+import { createOrderValidator, getOrderDetailsValidator, updateOrderValidator } from './order.validator';
 
 export const createOrderEndpoint = new Endpoint({
   path: '/orders',
@@ -32,6 +33,14 @@ export const getOrderByIdEndpoint = new Endpoint({
   handler: getOrderByIdHandler,
   authType: EndpointAuthType.NONE,
   validator: {}
+});
+
+export const getOrderDetailsEndpoint = new Endpoint({
+  path: '/orders/:orderId/details',
+  method: EndpointMethod.GET,
+  handler: getOrderDetailsHandler,
+  authType: EndpointAuthType.NONE,
+  validator: getOrderDetailsValidator
 });
 
 export const updateOrderEndpoint = new Endpoint({

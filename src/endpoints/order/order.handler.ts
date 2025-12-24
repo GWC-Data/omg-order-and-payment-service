@@ -7,13 +7,15 @@ import {
 import { Response } from 'express';
 import { randomUUID } from 'crypto';
 import { Op, WhereOptions } from 'sequelize';
-import { Order } from 'db/models';
+import { Order, OrderItem, OrderStatusHistory } from 'db/models';
 import { sendErrorResponse, sendSuccessResponse } from 'utils/responseUtils';
 import {
   ORDER_CREATED_SUCCESS,
   ORDER_CREATE_ERROR,
   ORDER_DELETED_SUCCESS,
   ORDER_DELETE_ERROR,
+  ORDER_DETAILS_FETCH_ERROR,
+  ORDER_DETAILS_FETCH_SUCCESS,
   ORDER_FETCH_ERROR,
   ORDER_FETCH_SUCCESS,
   ORDER_LIST_SUCCESS,
@@ -211,6 +213,40 @@ export const deleteOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async 
   } catch (error) {
     reportError(error);
     sendErrorResponse(res, 500, ORDER_DELETE_ERROR, error);
+  }
+};
+
+/**
+ * Get Order Details (Order + Items + Status History)
+ */
+export const getOrderDetailsHandler: EndpointHandler<EndpointAuthType.NONE> = async (
+  req: EndpointRequestType[EndpointAuthType.NONE],
+  res: Response
+) => {
+  try {
+    const orderId = String((req.params as any).orderId);
+    const order = await Order.findByPk(orderId);
+    if (!order) {
+      sendErrorResponse(res, 404, ORDER_NOT_FOUND);
+      return;
+    }
+
+    const [items, statusHistory] = await Promise.all([
+      OrderItem.findAll({ where: { orderId }, order: [['createdAt', 'ASC']] }),
+      OrderStatusHistory.findAll({
+        where: { orderId },
+        order: [['createdAt', 'DESC']]
+      })
+    ]);
+
+    sendSuccessResponse(res, 200, ORDER_DETAILS_FETCH_SUCCESS, {
+      order,
+      orderItems: items,
+      orderStatusHistory: statusHistory
+    });
+  } catch (error) {
+    reportError(error);
+    sendErrorResponse(res, 500, ORDER_DETAILS_FETCH_ERROR, error);
   }
 };
 

@@ -137,4 +137,12 @@ export const updateOrderValidator: Schema = {
   refundAmount: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'refundAmount must be a number' } }
 };
 
+export const getOrderDetailsValidator: Schema = {
+  orderId: {
+    in: 'params',
+    exists: { errorMessage: 'Order ID is required' },
+    isUUID: { errorMessage: 'Order ID must be a valid UUID' }
+  }
+};
+
 
