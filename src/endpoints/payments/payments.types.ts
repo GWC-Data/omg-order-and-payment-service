@@ -16,6 +16,25 @@ export interface VerifyPaymentBody {
   razorpay_order_id: string;
   razorpay_payment_id: string;
   razorpay_signature: string;
+
+  // Order details (used to create the app Order after payment is verified)
+  userId: string;
+  templeId: string;
+  addressId?: string;
+  orderType: 'darshan' | 'puja' | 'prasad' | 'product';
+  status?: string;
+  scheduledDate?: string;
+  scheduledTimestamp?: string;
+  fulfillmentType?: 'pickup' | 'delivery' | 'in_person' | 'digital';
+  subtotal?: number;
+  discountAmount?: number;
+  convenienceFee?: number;
+  taxAmount?: number;
+  totalAmount?: number;
+  currency?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
 }
 
 export interface CapturePaymentBody {

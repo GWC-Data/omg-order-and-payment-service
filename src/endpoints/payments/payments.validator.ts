@@ -62,7 +62,62 @@ export const verifyPaymentValidator: Schema = {
     in: 'body',
     exists: { errorMessage: 'razorpay_signature is required' },
     isString: true
-  }
+  },
+
+  // Order create fields (required)
+  userId: {
+    in: 'body',
+    exists: { errorMessage: 'User ID is required' },
+    isUUID: { errorMessage: 'User ID must be a valid UUID' }
+  },
+  templeId: {
+    in: 'body',
+    exists: { errorMessage: 'Temple ID is required' },
+    isUUID: { errorMessage: 'Temple ID must be a valid UUID' }
+  },
+  orderType: {
+    in: 'body',
+    exists: { errorMessage: 'Order type is required' },
+    isIn: {
+      options: [['darshan', 'puja', 'prasad', 'product']],
+      errorMessage: 'Invalid order type'
+    }
+  },
+
+  // Optional order fields
+  addressId: { in: 'body', optional: true, isUUID: { errorMessage: 'addressId must be a valid UUID' } },
+  status: {
+    in: 'body',
+    optional: true,
+    isIn: {
+      options: [['pending', 'confirmed', 'processing', 'ready', 'shipped', 'completed', 'cancelled', 'refunded']],
+      errorMessage: 'Invalid status'
+    }
+  },
+  scheduledDate: {
+    in: 'body',
+    optional: true,
+    isISO8601: { errorMessage: 'scheduledDate must be a valid ISO8601 date (YYYY-MM-DD)' }
+  },
+  scheduledTimestamp: {
+    in: 'body',
+    optional: true,
+    isISO8601: { errorMessage: 'scheduledTimestamp must be a valid ISO8601 date-time' }
+  },
+  fulfillmentType: {
+    in: 'body',
+    optional: true,
+    isIn: { options: [['pickup', 'delivery', 'in_person', 'digital']], errorMessage: 'Invalid fulfillment type' }
+  },
+  subtotal: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'subtotal must be a number' } },
+  discountAmount: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'discountAmount must be a number' } },
+  convenienceFee: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'convenienceFee must be a number' } },
+  taxAmount: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'taxAmount must be a number' } },
+  totalAmount: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'totalAmount must be a number' } },
+  currency: { in: 'body', optional: true, isString: { errorMessage: 'currency must be a string' } },
+  contactName: { in: 'body', optional: true, isString: { errorMessage: 'contactName must be a string' } },
+  contactPhone: { in: 'body', optional: true, isString: { errorMessage: 'contactPhone must be a string' } },
+  contactEmail: { in: 'body', optional: true, isEmail: { errorMessage: 'contactEmail must be a valid email address' } }
 };
 
 export const capturePaymentValidator: Schema = {

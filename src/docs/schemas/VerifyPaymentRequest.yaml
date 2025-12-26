@@ -4,6 +4,9 @@ VerifyPaymentRequest:
     - razorpay_order_id
     - razorpay_payment_id
     - razorpay_signature
+    - userId
+    - templeId
+    - orderType
   properties:
     razorpay_order_id:
       type: string
@@ -14,6 +17,49 @@ VerifyPaymentRequest:
     razorpay_signature:
       type: string
       description: Signature returned by Razorpay checkout.
+    userId:
+      type: string
+      format: uuid
+    templeId:
+      type: string
+      format: uuid
+    addressId:
+      type: string
+      format: uuid
+    orderType:
+      type: string
+      enum: [darshan, puja, prasad, product]
+    status:
+      type: string
+      enum: [pending, confirmed, processing, ready, shipped, completed, cancelled, refunded]
+    scheduledDate:
+      type: string
+      format: date
+    scheduledTimestamp:
+      type: string
+      format: date-time
+    fulfillmentType:
+      type: string
+      enum: [pickup, delivery, in_person, digital]
+    subtotal:
+      type: number
+    discountAmount:
+      type: number
+    convenienceFee:
+      type: number
+    taxAmount:
+      type: number
+    totalAmount:
+      type: number
+    currency:
+      type: string
+    contactName:
+      type: string
+    contactPhone:
+      type: string
+    contactEmail:
+      type: string
+      format: email
 
 
 

@@ -5,7 +5,8 @@ import {
   EndpointRequestType
 } from 'node-server-engine';
 import { Response } from 'express';
-import { PaymentOrder, PaymentStatus } from 'db/models';
+import { PaymentOrder, PaymentStatus, Order } from 'db/models';
+import { randomUUID } from 'crypto';
 import {
   getRazorpayClient,
   verifyPaymentSignature,
@@ -259,9 +260,11 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     // Prevent double processing
     if (order.status === 'paid' || order.status === 'captured') {
       console.warn(`Order ${body.razorpay_order_id} already processed with status: ${order.status}`);
+      const existingAppOrderId = (order.metadata as any)?.appOrderId as string | undefined;
       res.status(200).json({
         message: 'Payment already verified',
-        order
+        order,
+        appOrderId: existingAppOrderId
       });
       return;
     }
@@ -273,10 +276,49 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       status: 'paid' as PaymentStatus
     });
 
+    // Create app Order (idempotent using PaymentOrder.metadata.appOrderId)
+    const metadata = (order.metadata as Record<string, unknown> | undefined) ?? {};
+    const existingAppOrderId = (metadata as any).appOrderId as string | undefined;
+    if (!existingAppOrderId) {
+      const createdOrder = await Order.create({
+        // Ensure orderNumber is always set (extra safety). [[memory:12523883]]
+        orderNumber: randomUUID(),
+        userId: body.userId,
+        templeId: body.templeId,
+        addressId: body.addressId,
+        orderType: body.orderType,
+        status: (body.status as any) ?? 'pending',
+        scheduledDate: body.scheduledDate,
+        scheduledTimestamp: body.scheduledTimestamp,
+        fulfillmentType: body.fulfillmentType,
+        subtotal: body.subtotal,
+        discountAmount: body.discountAmount,
+        convenienceFee: body.convenienceFee,
+        taxAmount: body.taxAmount,
+        totalAmount: body.totalAmount,
+        currency: body.currency ?? order.currency,
+        paymentStatus: 'paid',
+        paymentMethod: 'razorpay',
+        paidAt: new Date(),
+        contactName: body.contactName,
+        contactPhone: body.contactPhone,
+        contactEmail: body.contactEmail ?? order.customerEmail
+      } as any);
+
+      await order.update({
+        metadata: {
+          ...metadata,
+          appOrderId: createdOrder.id,
+          razorpayPaymentId: body.razorpay_payment_id
+        }
+      } as any);
+    }
+
     console.log(`Payment verified successfully for order ${body.razorpay_order_id}`);
     res.status(200).json({
       message: 'Payment verified successfully',
-      order
+      order,
+      appOrderId: ((order.metadata as any)?.appOrderId as string | undefined)
     });
   } catch (error) {
     console.error('verifyPaymentSignatureHandler error:', error);
