@@ -46,9 +46,9 @@ export class Order extends Model {
   @Index
   @Column({
     type: DataType.UUID,
-    allowNull: false
+    allowNull: true
   })
-  templeId!: string;
+  templeId?: string;
 
   @Index
   @Column({

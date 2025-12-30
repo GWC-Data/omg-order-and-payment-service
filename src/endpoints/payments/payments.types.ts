@@ -19,7 +19,7 @@ export interface VerifyPaymentBody {
 
   // Order details (used to create the app Order after payment is verified)
   userId: string;
-  templeId: string;
+  templeId?: string;
   addressId?: string;
   orderType: 'darshan' | 'puja' | 'prasad' | 'product';
   status?: string;

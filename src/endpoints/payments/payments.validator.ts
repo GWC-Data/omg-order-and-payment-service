@@ -72,7 +72,8 @@ export const verifyPaymentValidator: Schema = {
   },
   templeId: {
     in: 'body',
-    exists: { errorMessage: 'Temple ID is required' },
+    optional: true,
+    // exists: { errorMessage: 'Temple ID is required' },
     isUUID: { errorMessage: 'Temple ID must be a valid UUID' }
   },
   orderType: {

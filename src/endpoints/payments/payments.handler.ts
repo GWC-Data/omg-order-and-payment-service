@@ -283,8 +283,8 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       const createdOrder = await Order.create({
         // Ensure orderNumber is always set (extra safety). [[memory:12523883]]
         orderNumber: randomUUID(),
-        userId: body.userId,
-        templeId: body.templeId,
+        userId: body?.userId ?? null,
+        templeId: body?.templeId ?? null,
         addressId: body.addressId,
         orderType: body.orderType,
         status: (body.status as any) ?? 'pending',
