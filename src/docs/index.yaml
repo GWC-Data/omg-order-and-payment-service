@@ -6,6 +6,8 @@ info:
 servers:
   - url: http://localhost:5050/
     description: Local Server
+  - url: https://omg-order-and-payment-service-993414851442.asia-south1.run.app/
+    description: Production Server
 
 components:
   securitySchemes:
