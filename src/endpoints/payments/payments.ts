@@ -25,45 +25,45 @@ export const createPaymentOrderEndpoint = new Endpoint({
   path: '/payments/orders',
   method: EndpointMethod.POST,
   handler: createPaymentOrderHandler,
-  authType: EndpointAuthType.NONE,
+  authType: EndpointAuthType.JWT,
   validator: createPaymentOrderValidator,
-  middleware: []
+  middleware: [middleware.checkPermission('CreatePaymentOrder')]
 });
 
 export const listPaymentOrdersEndpoint = new Endpoint({
   path: '/payments/orders',
   method: EndpointMethod.GET,
   handler: listPaymentOrdersHandler,
-  authType: EndpointAuthType.NONE,
+  authType: EndpointAuthType.JWT,
   validator: listPaymentOrdersValidator,
-  middleware: []
+  middleware: [middleware.checkPermission('GetPaymentOrder')]
 });
 
 export const getPaymentOrderEndpoint = new Endpoint({
   path: '/payments/orders/:orderId',
   method: EndpointMethod.GET,
   handler: getPaymentOrderHandler,
-  authType: EndpointAuthType.NONE,
+  authType: EndpointAuthType.JWT,
   validator: getPaymentOrderValidator,
-  middleware: []
+  middleware: [middleware.checkPermission('GetPaymentOrder')]
 });
 
 export const verifyPaymentSignatureEndpoint = new Endpoint({
   path: '/payments/verify',
   method: EndpointMethod.POST,
   handler: verifyPaymentSignatureHandler,
-  authType: EndpointAuthType.NONE,
+  authType: EndpointAuthType.JWT,
   validator: verifyPaymentValidator,
-  middleware: []
+  middleware: [middleware.checkPermission('VerifyPayment')]
 });
 
 export const capturePaymentEndpoint = new Endpoint({
   path: '/payments/capture',
   method: EndpointMethod.POST,
   handler: capturePaymentHandler,
-  authType: EndpointAuthType.NONE,
+  authType: EndpointAuthType.JWT,
   validator: capturePaymentValidator,
-  middleware: []
+  middleware: [middleware.checkPermission('CapturePayment')]
 });
 
 export const razorpayWebhookEndpoint = new Endpoint({

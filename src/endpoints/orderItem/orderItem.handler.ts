@@ -24,8 +24,8 @@ import {
 /**
  * Create Order Item
  */
-export const createOrderItemHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const createOrderItemHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -59,8 +59,8 @@ export const createOrderItemHandler: EndpointHandler<EndpointAuthType.NONE> = as
 /**
  * List Order Items for an Order
  */
-export const getAllOrderItemsHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const getAllOrderItemsHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -79,8 +79,8 @@ export const getAllOrderItemsHandler: EndpointHandler<EndpointAuthType.NONE> = a
 /**
  * Get Order Item by Id (scoped to order)
  */
-export const getOrderItemByIdHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const getOrderItemByIdHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -103,8 +103,8 @@ export const getOrderItemByIdHandler: EndpointHandler<EndpointAuthType.NONE> = a
 /**
  * Update Order Item
  */
-export const updateOrderItemHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const updateOrderItemHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -144,8 +144,8 @@ export const updateOrderItemHandler: EndpointHandler<EndpointAuthType.NONE> = as
 /**
  * Delete Order Item
  */
-export const deleteOrderItemHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const deleteOrderItemHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {

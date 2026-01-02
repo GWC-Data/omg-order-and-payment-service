@@ -1,4 +1,4 @@
-import { Endpoint, EndpointMethod, EndpointAuthType } from 'node-server-engine';
+import { Endpoint, EndpointMethod, EndpointAuthType, middleware } from 'node-server-engine';
 
 import {
   createOrderStatusHistoryHandler,
@@ -16,32 +16,36 @@ export const createOrderStatusHistoryEndpoint = new Endpoint({
   path: '/orders/:orderId/status-history',
   method: EndpointMethod.POST,
   handler: createOrderStatusHistoryHandler,
-  authType: EndpointAuthType.NONE,
-  validator: createOrderStatusHistoryValidator
+  authType: EndpointAuthType.JWT,
+  validator: createOrderStatusHistoryValidator,
+  middleware: [middleware.checkPermission('CreateOrderStatusHistory')]
 });
 
 export const getAllOrderStatusHistoryEndpoint = new Endpoint({
   path: '/orders/:orderId/status-history',
   method: EndpointMethod.GET,
   handler: getAllOrderStatusHistoryHandler,
-  authType: EndpointAuthType.NONE,
-  validator: {}
+  authType: EndpointAuthType.JWT,
+  validator: {},
+  middleware: [middleware.checkPermission('GetOrderStatusHistory')]
 });
 
 export const getOrderStatusHistoryByIdEndpoint = new Endpoint({
   path: '/orders/:orderId/status-history/:id',
   method: EndpointMethod.GET,
   handler: getOrderStatusHistoryByIdHandler,
-  authType: EndpointAuthType.NONE,
-  validator: getOrderStatusHistoryByIdValidator
+  authType: EndpointAuthType.JWT,
+  validator: getOrderStatusHistoryByIdValidator,
+  middleware: [middleware.checkPermission('GetOrderStatusHistory')]
 });
 
 export const deleteOrderStatusHistoryEndpoint = new Endpoint({
   path: '/orders/:orderId/status-history/:id',
   method: EndpointMethod.DELETE,
   handler: deleteOrderStatusHistoryHandler,
-  authType: EndpointAuthType.NONE,
-  validator: getOrderStatusHistoryByIdValidator
+  authType: EndpointAuthType.JWT,
+  validator: getOrderStatusHistoryByIdValidator,
+  middleware: [middleware.checkPermission('DeleteOrderStatusHistory')]
 });
 
 

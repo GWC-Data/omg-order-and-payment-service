@@ -1,4 +1,4 @@
-import { Endpoint, EndpointMethod, EndpointAuthType } from 'node-server-engine';
+import { Endpoint, EndpointMethod, EndpointAuthType, middleware } from 'node-server-engine';
 
 import {
   createOrderItemHandler,
@@ -14,40 +14,45 @@ export const createOrderItemEndpoint = new Endpoint({
   path: '/orders/:orderId/items',
   method: EndpointMethod.POST,
   handler: createOrderItemHandler,
-  authType: EndpointAuthType.NONE,
-  validator: createOrderItemValidator
+  authType: EndpointAuthType.JWT,
+  validator: createOrderItemValidator,
+  middleware: [middleware.checkPermission('CreateOrderItem')]
 });
 
 export const getAllOrderItemsEndpoint = new Endpoint({
   path: '/orders/:orderId/items',
   method: EndpointMethod.GET,
   handler: getAllOrderItemsHandler,
-  authType: EndpointAuthType.NONE,
-  validator: {}
+  authType: EndpointAuthType.JWT,
+  validator: {},
+  middleware: [middleware.checkPermission('GetOrderItem')]
 });
 
 export const getOrderItemByIdEndpoint = new Endpoint({
   path: '/orders/:orderId/items/:id',
   method: EndpointMethod.GET,
   handler: getOrderItemByIdHandler,
-  authType: EndpointAuthType.NONE,
-  validator: {}
+  authType: EndpointAuthType.JWT,
+  validator: {},
+  middleware: [middleware.checkPermission('GetOrderItem')]
 });
 
 export const updateOrderItemEndpoint = new Endpoint({
   path: '/orders/:orderId/items/:id',
   method: EndpointMethod.PUT,
   handler: updateOrderItemHandler,
-  authType: EndpointAuthType.NONE,
-  validator: updateOrderItemValidator
+  authType: EndpointAuthType.JWT,
+  validator: updateOrderItemValidator,
+  middleware: [middleware.checkPermission('UpdateOrderItem')]
 });
 
 export const deleteOrderItemEndpoint = new Endpoint({
   path: '/orders/:orderId/items/:id',
   method: EndpointMethod.DELETE,
   handler: deleteOrderItemHandler,
-  authType: EndpointAuthType.NONE,
-  validator: {}
+  authType: EndpointAuthType.JWT,
+  validator: {},
+  middleware: [middleware.checkPermission('DeleteOrderItem')]
 });
 
 

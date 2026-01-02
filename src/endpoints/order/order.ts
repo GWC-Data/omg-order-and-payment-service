@@ -1,4 +1,4 @@
-import { Endpoint, EndpointMethod, EndpointAuthType } from 'node-server-engine';
+import { Endpoint, EndpointMethod, EndpointAuthType, middleware } from 'node-server-engine';
 
 import {
   createOrderHandler,
@@ -15,48 +15,54 @@ export const createOrderEndpoint = new Endpoint({
   path: '/orders',
   method: EndpointMethod.POST,
   handler: createOrderHandler,
-  authType: EndpointAuthType.NONE,
-  validator: createOrderValidator
+  authType: EndpointAuthType.JWT,
+  validator: createOrderValidator,
+  middleware: [middleware.checkPermission('CreateOrder')]
 });
 
 export const getAllOrdersEndpoint = new Endpoint({
   path: '/orders',
   method: EndpointMethod.GET,
   handler: getAllOrdersHandler,
-  authType: EndpointAuthType.NONE,
-  validator: {}
+  authType: EndpointAuthType.JWT,
+  validator: {},
+  middleware: [middleware.checkPermission('GetOrder')]
 });
 
 export const getOrderByIdEndpoint = new Endpoint({
   path: '/orders/:id',
   method: EndpointMethod.GET,
   handler: getOrderByIdHandler,
-  authType: EndpointAuthType.NONE,
-  validator: {}
+  authType: EndpointAuthType.JWT,
+  validator: {},
+  middleware: [middleware.checkPermission('GetOrder')]
 });
 
 export const getOrderDetailsEndpoint = new Endpoint({
   path: '/orders/:orderId/details',
   method: EndpointMethod.GET,
   handler: getOrderDetailsHandler,
-  authType: EndpointAuthType.NONE,
-  validator: getOrderDetailsValidator
+  authType: EndpointAuthType.JWT,
+  validator: getOrderDetailsValidator,
+  middleware: [middleware.checkPermission('GetOrder')]
 });
 
 export const updateOrderEndpoint = new Endpoint({
   path: '/orders/:id',
   method: EndpointMethod.PUT,
   handler: updateOrderHandler,
-  authType: EndpointAuthType.NONE,
-  validator: updateOrderValidator
+  authType: EndpointAuthType.JWT,
+  validator: updateOrderValidator,
+  middleware: [middleware.checkPermission('UpdateOrder')]
 });
 
 export const deleteOrderEndpoint = new Endpoint({
   path: '/orders/:id',
   method: EndpointMethod.DELETE,
   handler: deleteOrderHandler,
-  authType: EndpointAuthType.NONE,
-  validator: {}
+  authType: EndpointAuthType.JWT,
+  validator: {},
+  middleware: [middleware.checkPermission('DeleteOrder')]
 });
 
 

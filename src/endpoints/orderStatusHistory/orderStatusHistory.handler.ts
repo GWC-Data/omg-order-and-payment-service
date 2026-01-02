@@ -22,8 +22,8 @@ import {
 /**
  * Create status history record
  */
-export const createOrderStatusHistoryHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const createOrderStatusHistoryHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -49,8 +49,8 @@ export const createOrderStatusHistoryHandler: EndpointHandler<EndpointAuthType.N
 /**
  * List history records for an order
  */
-export const getAllOrderStatusHistoryHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const getAllOrderStatusHistoryHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -71,8 +71,8 @@ export const getAllOrderStatusHistoryHandler: EndpointHandler<EndpointAuthType.N
 /**
  * Get a single history record
  */
-export const getOrderStatusHistoryByIdHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const getOrderStatusHistoryByIdHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -97,8 +97,8 @@ export const getOrderStatusHistoryByIdHandler: EndpointHandler<EndpointAuthType.
 /**
  * Delete a history record
  */
-export const deleteOrderStatusHistoryHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const deleteOrderStatusHistoryHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {

@@ -66,9 +66,9 @@ function fromUnixTimestamp(value?: number | null): Date | undefined {
 }
 
 export const createPaymentOrderHandler: EndpointHandler<
-  EndpointAuthType.NONE
+  EndpointAuthType.JWT
 > = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   const body = req.body as CreatePaymentOrderBody;
@@ -140,9 +140,9 @@ export const createPaymentOrderHandler: EndpointHandler<
 };
 
 export const listPaymentOrdersHandler: EndpointHandler<
-  EndpointAuthType.NONE
+  EndpointAuthType.JWT
 > = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   const { status, page = 1, pageSize = 25, userId } = req
@@ -180,9 +180,9 @@ export const listPaymentOrdersHandler: EndpointHandler<
 };
 
 export const getPaymentOrderHandler: EndpointHandler<
-  EndpointAuthType.NONE
+  EndpointAuthType.JWT
 > = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   const { orderId } = req.params as { orderId: string };
@@ -218,9 +218,9 @@ export const getPaymentOrderHandler: EndpointHandler<
 };
 
 export const verifyPaymentSignatureHandler: EndpointHandler<
-  EndpointAuthType.NONE
+  EndpointAuthType.JWT
 > = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   const body = req.body as VerifyPaymentBody;
@@ -330,9 +330,9 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
 };
 
 export const capturePaymentHandler: EndpointHandler<
-  EndpointAuthType.NONE
+  EndpointAuthType.JWT
 > = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   const body = req.body as CapturePaymentBody;

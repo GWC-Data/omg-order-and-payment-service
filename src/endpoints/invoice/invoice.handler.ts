@@ -16,19 +16,19 @@ import {
   UNAUTHORIZED
 } from './invoice.const';
 
-function isAdmin(req: EndpointRequestType[EndpointAuthType.NONE]): boolean {
+function isAdmin(req: EndpointRequestType[EndpointAuthType.JWT]): boolean {
   const role = String(((req as any).user as any)?.role ?? '').toLowerCase();
   return role === 'admin' || role === 'superadmin';
 }
 
-function getAuthUserId(req: EndpointRequestType[EndpointAuthType.NONE]): string | null {
+function getAuthUserId(req: EndpointRequestType[EndpointAuthType.JWT]): string | null {
   const id = ((req as any).user as any)?.id;
   if (id === null || id === undefined) return null;
   return String(id);
 }
 
-export const downloadOrderInvoiceHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const downloadOrderInvoiceHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -41,7 +41,7 @@ export const downloadOrderInvoiceHandler: EndpointHandler<EndpointAuthType.NONE>
 
     const userId = getAuthUserId(req);
     if (!userId) {
-      // Keep 401 code path for later, but don't block while authType is NONE.
+      // With JWT auth, userId should always be available, but keep this check for safety
       if (enforceAuth) {
         sendErrorResponse(res, 401, UNAUTHORIZED);
         return;

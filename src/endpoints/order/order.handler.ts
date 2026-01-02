@@ -27,8 +27,8 @@ import {
 /**
  * Create Order
  */
-export const createOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -76,8 +76,8 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async 
 /**
  * Get Order by Id
  */
-export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -97,8 +97,8 @@ export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.NONE> = async
 /**
  * Get All Orders (basic filtering + pagination)
  */
-export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -145,8 +145,8 @@ export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.NONE> = async
 /**
  * Update Order
  */
-export const updateOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -197,8 +197,8 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async 
 /**
  * Delete Order
  */
-export const deleteOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const deleteOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
@@ -219,8 +219,8 @@ export const deleteOrderHandler: EndpointHandler<EndpointAuthType.NONE> = async 
 /**
  * Get Order Details (Order + Items + Status History)
  */
-export const getOrderDetailsHandler: EndpointHandler<EndpointAuthType.NONE> = async (
-  req: EndpointRequestType[EndpointAuthType.NONE],
+export const getOrderDetailsHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
