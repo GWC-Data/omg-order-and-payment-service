@@ -5,7 +5,7 @@ import {
   EndpointRequestType
 } from 'node-server-engine';
 import { Response } from 'express';
-import { PaymentOrder, PaymentStatus, Order, OrderItem } from 'db/models';
+import { PaymentOrder, PaymentStatus, Order, OrderItem, OrderStatusHistory } from 'db/models';
 import { randomUUID } from 'crypto';
 import {
   getRazorpayClient,
@@ -363,12 +363,44 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       }
     }
 
+    // Create initial OrderStatusHistory if order exists and status history doesn't exist
+    let createdStatusHistory: OrderStatusHistory | null = null;
+    if (createdOrder) {
+      // Check if status history already exists for this order (idempotency)
+      const existingStatusHistory = await OrderStatusHistory.findOne({
+        where: { orderId: createdOrder.id }
+      });
+
+      if (!existingStatusHistory) {
+        try {
+          const initialStatus = (body.status as any) ?? 'pending';
+          createdStatusHistory = await OrderStatusHistory.create({
+            id: randomUUID(),
+            orderId: createdOrder.id,
+            status: initialStatus,
+            previousStatus: null,
+            notes: 'Order created via payment verification',
+            location: null
+          } as any);
+          console.log(`Created initial order status history for order ${createdOrder.id} with status: ${initialStatus}`);
+        } catch (statusHistoryError) {
+          console.error('Error creating order status history:', statusHistoryError);
+          // Log error but don't fail the payment verification
+          // The order is already created, so we continue
+        }
+      } else {
+        console.log(`Order status history already exists for order ${createdOrder.id}, skipping creation`);
+        createdStatusHistory = existingStatusHistory;
+      }
+    }
+
     console.log(`Payment verified successfully for order ${body.razorpay_order_id}`);
     res.status(200).json({
       message: 'Payment verified successfully',
       order,
       appOrderId: ((order.metadata as any)?.appOrderId as string | undefined),
-      orderItems: createdOrderItems.length > 0 ? createdOrderItems : undefined
+      orderItems: createdOrderItems.length > 0 ? createdOrderItems : undefined,
+      orderStatusHistory: createdStatusHistory ? [createdStatusHistory] : undefined
     });
   } catch (error) {
     console.error('verifyPaymentSignatureHandler error:', error);

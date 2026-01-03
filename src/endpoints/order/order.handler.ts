@@ -66,6 +66,23 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
       refundAmount: req.body.refundAmount
     } as any);
 
+    // Create initial OrderStatusHistory
+    try {
+      const initialStatus = req.body.status ?? 'pending';
+      await OrderStatusHistory.create({
+        id: randomUUID(),
+        orderId: order.id,
+        status: initialStatus,
+        previousStatus: null,
+        notes: 'Order created',
+        location: null
+      } as any);
+      console.log(`Created initial order status history for order ${order.id} with status: ${initialStatus}`);
+    } catch (statusHistoryError) {
+      console.error('Error creating order status history:', statusHistoryError);
+      // Log error but don't fail the order creation
+    }
+
     sendSuccessResponse(res, 201, ORDER_CREATED_SUCCESS, { order });
   } catch (error) {
     reportError(error);
@@ -156,12 +173,15 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
       return;
     }
 
+    const oldStatus = order.status;
+    const newStatus = req.body.status ?? order.status;
+
     await order.update({
       userId: req.body.userId ?? order.userId,
       templeId: req.body.templeId ?? order.templeId,
       addressId: req.body.addressId ?? (order as any).addressId,
       orderType: req.body.orderType ?? order.orderType,
-      status: req.body.status ?? order.status,
+      status: newStatus,
       scheduledDate: req.body.scheduledDate ?? order.scheduledDate,
       scheduledTimestamp: req.body.scheduledTimestamp ?? order.scheduledTimestamp,
       fulfillmentType: req.body.fulfillmentType ?? order.fulfillmentType,
@@ -186,6 +206,24 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
       cancellationReason: req.body.cancellationReason ?? order.cancellationReason,
       refundAmount: req.body.refundAmount ?? order.refundAmount
     } as any);
+
+    // Create OrderStatusHistory if status changed
+    if (oldStatus !== newStatus) {
+      try {
+        await OrderStatusHistory.create({
+          id: randomUUID(),
+          orderId: order.id,
+          status: newStatus,
+          previousStatus: oldStatus,
+          notes: `Order status updated from ${oldStatus} to ${newStatus}`,
+          location: null
+        } as any);
+        console.log(`Created order status history for order ${order.id}: ${oldStatus} -> ${newStatus}`);
+      } catch (statusHistoryError) {
+        console.error('Error creating order status history:', statusHistoryError);
+        // Log error but don't fail the order update
+      }
+    }
 
     sendSuccessResponse(res, 200, ORDER_UPDATED_SUCCESS, { order });
   } catch (error) {
