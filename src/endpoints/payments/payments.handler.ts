@@ -7,6 +7,7 @@ import {
 import { Response } from 'express';
 import { PaymentOrder, PaymentStatus, Order, OrderItem, OrderStatusHistory } from 'db/models';
 import { randomUUID } from 'crypto';
+import { QueryTypes } from 'sequelize';
 import {
   getRazorpayClient,
   verifyPaymentSignature,
@@ -249,13 +250,45 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       return;
     }
 
-    const order = await PaymentOrder.findOne({
+    // Find PaymentOrder - try Sequelize first, then raw query as fallback
+    let order = await PaymentOrder.findOne({
       where: { razorpayOrderId: body.razorpay_order_id }
     });
 
+    // Fallback: Try raw query in case of column name mismatch
     if (!order) {
-      console.error(`Order not found: ${body.razorpay_order_id}`);
-      res.status(404).json({ message: PAYMENT_ORDER_NOT_FOUND });
+      try {
+        const { sequelize } = await import('node-server-engine');
+        const dialect = (process.env.SQL_TYPE ?? 'postgres').toLowerCase();
+        
+        let query = '';
+        if (dialect === 'postgres') {
+          query = `SELECT * FROM "PaymentOrders" WHERE "razorpayOrderId" = $1 OR "razorpay_order_id" = $1 LIMIT 1`;
+        } else {
+          query = `SELECT * FROM PaymentOrders WHERE razorpayOrderId = ? OR razorpay_order_id = ? LIMIT 1`;
+        }
+        
+        const [results]: any = await sequelize.getQueryInterface().sequelize.query(query, {
+          replacements: dialect === 'postgres' ? [body.razorpay_order_id] : [body.razorpay_order_id, body.razorpay_order_id],
+          type: QueryTypes.SELECT
+        });
+        
+        if (results && results.length > 0) {
+          order = PaymentOrder.build(results[0]);
+          console.log('[DEBUG] Order found using raw query fallback');
+        }
+      } catch (rawQueryError) {
+        console.error('[DEBUG] Error with raw query fallback:', rawQueryError);
+      }
+    }
+
+    if (!order) {
+      console.error(`[ERROR] PaymentOrder not found: ${body.razorpay_order_id}`);
+      console.error('[DEBUG] Request body userId:', body.userId);
+      res.status(404).json({ 
+        message: PAYMENT_ORDER_NOT_FOUND,
+        searchedId: body.razorpay_order_id
+      });
       return;
     }
 
@@ -287,6 +320,25 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       status: 'paid' as PaymentStatus
     });
 
+    // Validate required fields before creating Order
+    if (!body.userId) {
+      console.error('[ERROR] userId is required but missing in request body');
+      res.status(400).json({ 
+        message: 'User ID is required to create order',
+        error: 'userId is missing from request body'
+      });
+      return;
+    }
+
+    if (!body.orderType) {
+      console.error('[ERROR] orderType is required but missing in request body');
+      res.status(400).json({ 
+        message: 'Order type is required to create order',
+        error: 'orderType is missing from request body'
+      });
+      return;
+    }
+
     // Create app Order (idempotent using PaymentOrder.metadata.appOrderId)
     const metadata = (order.metadata as Record<string, unknown> | undefined) ?? {};
     const existingAppOrderId = (metadata as any).appOrderId as string | undefined;
@@ -294,41 +346,74 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     
     if (!existingAppOrderId) {
       try {
-        createdOrder = await Order.create({
+        // Prepare order data with all required fields
+        const orderData: any = {
           // Ensure orderNumber is always set (extra safety). [[memory:12523883]]
           orderNumber: randomUUID(),
-          userId: body?.userId ?? null,
-          templeId: body?.templeId ?? null,
-          addressId: body.addressId,
-          orderType: body.orderType,
+          userId: body.userId, // Required - validated above
+          orderType: body.orderType, // Required - validated above
           status: (body.status as any) ?? 'pending',
-          scheduledDate: body.scheduledDate,
-          scheduledTimestamp: body.scheduledTimestamp,
-          fulfillmentType: body.fulfillmentType,
-          subtotal: body.subtotal,
-          discountAmount: body.discountAmount,
-          convenienceFee: body.convenienceFee,
-          taxAmount: body.taxAmount,
-          totalAmount: body.totalAmount,
-          currency: body.currency ?? order.currency,
           paymentStatus: 'paid',
           paymentMethod: 'razorpay',
-          paidAt: new Date(),
-          contactName: body.contactName,
-          contactPhone: body.contactPhone,
-          contactEmail: body.contactEmail ?? order.customerEmail,
-          shippingAddress: body.shippingAddress,
-          deliveryType: body.deliveryType
-        } as any);
-      } catch (orderCreateError) {
-        console.error('Error creating Order:', orderCreateError);
-        console.error('Order creation error details:', {
-          message: (orderCreateError as Error).message,
-          name: (orderCreateError as Error).name,
-          stack: (orderCreateError as Error).stack
+          paidAt: new Date()
+        };
+
+        // Add optional fields only if they exist
+        if (body.templeId) orderData.templeId = body.templeId;
+        if (body.addressId) orderData.addressId = body.addressId;
+        if (body.scheduledDate) orderData.scheduledDate = body.scheduledDate;
+        if (body.scheduledTimestamp) orderData.scheduledTimestamp = body.scheduledTimestamp;
+        if (body.fulfillmentType) orderData.fulfillmentType = body.fulfillmentType;
+        if (body.subtotal !== undefined) orderData.subtotal = String(body.subtotal);
+        if (body.discountAmount !== undefined) orderData.discountAmount = String(body.discountAmount);
+        if (body.convenienceFee !== undefined) orderData.convenienceFee = String(body.convenienceFee);
+        if (body.taxAmount !== undefined) orderData.taxAmount = String(body.taxAmount);
+        if (body.totalAmount !== undefined) orderData.totalAmount = String(body.totalAmount);
+        if (body.currency) orderData.currency = body.currency;
+        else if (order.currency) orderData.currency = order.currency;
+        if (body.contactName) orderData.contactName = body.contactName;
+        if (body.contactPhone) orderData.contactPhone = body.contactPhone;
+        if (body.contactEmail) orderData.contactEmail = body.contactEmail;
+        else if (order.customerEmail) orderData.contactEmail = order.customerEmail;
+        if (body.shippingAddress) orderData.shippingAddress = body.shippingAddress;
+        if (body.deliveryType) orderData.deliveryType = body.deliveryType;
+
+        console.log('[DEBUG] Creating Order with data:', {
+          userId: orderData.userId,
+          orderType: orderData.orderType,
+          status: orderData.status,
+          paymentStatus: orderData.paymentStatus
         });
+
+        createdOrder = await Order.create(orderData);
+        console.log(`[SUCCESS] Created Order ${createdOrder.id} for PaymentOrder ${body.razorpay_order_id}`);
+      } catch (orderCreateError) {
+        const error = orderCreateError as Error;
+        console.error('[ERROR] Failed to create Order:', error.message);
+        console.error('[ERROR] Order creation error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+          orderData: {
+            userId: body.userId,
+            orderType: body.orderType,
+            status: (body.status as any) ?? 'pending'
+          }
+        });
+        
+        // Check for specific database errors
+        if (error.message.includes('null value') || error.message.includes('NOT NULL')) {
+          throw new Error(`Database constraint violation: ${error.message}. Check that all required fields are provided.`);
+        }
+        if (error.message.includes('violates foreign key') || error.message.includes('FOREIGN KEY')) {
+          throw new Error(`Foreign key violation: ${error.message}. Check that userId, templeId, or addressId exist in their respective tables.`);
+        }
+        if (error.message.includes('duplicate key') || error.message.includes('UNIQUE')) {
+          throw new Error(`Duplicate key violation: ${error.message}. Order may already exist.`);
+        }
+        
         // Re-throw with more context
-        throw new Error(`Failed to create order: ${(orderCreateError as Error).message}`);
+        throw new Error(`Failed to create order: ${error.message}`);
       }
 
       await order.update({
@@ -427,22 +512,51 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       orderStatusHistory: createdStatusHistory ? [createdStatusHistory] : undefined
     });
   } catch (error) {
-    const errorMessage = (error as Error).message || String(error);
-    const errorStack = (error as Error).stack;
+    const err = error as Error;
+    const errorMessage = err.message || String(error);
+    const errorStack = err.stack;
     
-    console.error('verifyPaymentSignatureHandler error:', errorMessage);
-    console.error('Error stack:', errorStack);
-    console.error('Request body:', JSON.stringify(body, null, 2));
-    console.error('Full error object:', error);
+    console.error('[ERROR] verifyPaymentSignatureHandler failed:', errorMessage);
+    console.error('[ERROR] Error name:', err.name);
+    console.error('[ERROR] Error stack:', errorStack);
+    console.error('[ERROR] Request body keys:', Object.keys(body));
+    console.error('[ERROR] Request body (sanitized):', {
+      razorpay_order_id: body.razorpay_order_id,
+      razorpay_payment_id: body.razorpay_payment_id,
+      userId: body.userId,
+      orderType: body.orderType,
+      hasOrderItems: !!body.orderItems,
+      orderItemsCount: body.orderItems?.length || 0
+    });
+    
+    // Provide more specific error messages based on error type
+    let statusCode = 500;
+    let responseMessage = 'Unable to verify payment signature';
+    
+    if (errorMessage.includes('Database constraint violation') || errorMessage.includes('null value') || errorMessage.includes('NOT NULL')) {
+      statusCode = 400;
+      responseMessage = 'Invalid order data provided. Check that all required fields are present.';
+    } else if (errorMessage.includes('Foreign key violation') || errorMessage.includes('FOREIGN KEY')) {
+      statusCode = 400;
+      responseMessage = 'Invalid reference ID. Check that userId, templeId, or addressId exist in their respective tables.';
+    } else if (errorMessage.includes('Duplicate key violation') || errorMessage.includes('UNIQUE')) {
+      statusCode = 409;
+      responseMessage = 'Order already exists';
+    } else if (errorMessage.includes('User ID is required') || errorMessage.includes('Order type is required')) {
+      statusCode = 400;
+      responseMessage = errorMessage;
+    }
     
     // Always return detailed error in response for debugging
-    res.status(500).json({
-      message: 'Unable to verify payment signature',
+    res.status(statusCode).json({
+      message: responseMessage,
       error: errorMessage,
       stack: process.env.NODE_ENV === 'development' ? errorStack : undefined,
       details: process.env.NODE_ENV === 'development' ? {
-        name: (error as Error).name,
-        body: body
+        name: err.name,
+        userId: body.userId,
+        orderType: body.orderType,
+        razorpay_order_id: body.razorpay_order_id
       } : undefined
     });
   }
