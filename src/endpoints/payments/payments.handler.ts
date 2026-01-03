@@ -385,7 +385,24 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
           paymentStatus: orderData.paymentStatus
         });
 
+        // Explicitly set id (UUID generation) - this ensures we have the id immediately
+        const orderId = randomUUID();
+        orderData.id = orderId;
+
         createdOrder = await Order.create(orderData);
+        
+        // Verify order was created
+        if (!createdOrder) {
+          throw new Error('Order creation returned null/undefined');
+        }
+        
+        // Ensure id is accessible - use the one we set if model doesn't have it
+        // This handles cases where Sequelize doesn't return the id immediately
+        if (!createdOrder.id) {
+          (createdOrder as any).id = orderId;
+          console.warn('[WARN] Order.id was not set by Sequelize, using generated id');
+        }
+        
         console.log(`[SUCCESS] Created Order ${createdOrder.id} for PaymentOrder ${body.razorpay_order_id}`);
       } catch (orderCreateError) {
         const error = orderCreateError as Error;
@@ -431,6 +448,14 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     // Create OrderItems if provided and order exists
     let createdOrderItems: OrderItem[] = [];
     if (createdOrder && body.orderItems && Array.isArray(body.orderItems) && body.orderItems.length > 0) {
+      // Ensure createdOrder has an id
+      if (!createdOrder.id) {
+        console.error('[ERROR] Created Order has no id, cannot create OrderItems');
+        throw new Error('Order was created but id is missing');
+      }
+
+      console.log(`[DEBUG] Creating OrderItems for order ${createdOrder.id}`);
+      
       // Check if orderItems already exist for this order (idempotency)
       const existingOrderItems = await OrderItem.findAll({
         where: { orderId: createdOrder.id }
