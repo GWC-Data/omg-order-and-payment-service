@@ -53,6 +53,13 @@
               cancelledAt: { type: string, format: date-time }
               cancellationReason: { type: string }
               refundAmount: { type: number }
+              shippingAddress:
+                type: string
+                description: Full shipping address (address, city, state, country combined)
+              deliveryType:
+                type: string
+                enum: [standard, express]
+                description: Delivery speed type
     responses:
       '201':
         description: Order created successfully
@@ -181,6 +188,50 @@
         application/json:
           schema:
             type: object
+            properties:
+              userId: { type: string, format: uuid }
+              templeId: { type: string, format: uuid }
+              addressId: { type: string, format: uuid }
+              orderType:
+                type: string
+                enum: [darshan, puja, prasad, product]
+              status:
+                type: string
+                enum: [pending, confirmed, processing, ready, shipped, completed, cancelled, refunded]
+              scheduledDate: { type: string, format: date }
+              scheduledTimestamp: { type: string, format: date-time }
+              fulfillmentType:
+                type: string
+                enum: [pickup, delivery, in_person, digital]
+              subtotal: { type: number }
+              discountAmount: { type: number }
+              convenienceFee: { type: number }
+              taxAmount: { type: number }
+              totalAmount: { type: number }
+              currency: { type: string }
+              paymentStatus:
+                type: string
+                enum: [pending, paid, failed, refunded]
+              paymentMethod: { type: string }
+              paymentId: { type: string, format: uuid }
+              paidAt: { type: string, format: date-time }
+              trackingNumber: { type: string }
+              carrier: { type: string }
+              shippedAt: { type: string, format: date-time }
+              deliveredAt: { type: string, format: date-time }
+              contactName: { type: string }
+              contactPhone: { type: string }
+              contactEmail: { type: string }
+              cancelledAt: { type: string, format: date-time }
+              cancellationReason: { type: string }
+              refundAmount: { type: number }
+              shippingAddress:
+                type: string
+                description: Full shipping address (address, city, state, country combined)
+              deliveryType:
+                type: string
+                enum: [standard, express]
+                description: Delivery speed type
     responses:
       '200':
         description: Order updated successfully

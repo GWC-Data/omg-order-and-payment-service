@@ -60,6 +60,13 @@ VerifyPaymentRequest:
     contactEmail:
       type: string
       format: email
+    shippingAddress:
+      type: string
+      description: Full shipping address (address, city, state, country combined)
+    deliveryType:
+      type: string
+      enum: [standard, express]
+      description: Delivery speed type
     orderItems:
       type: array
       description: Optional array of order items to be created with the order
