@@ -75,10 +75,18 @@ export function verifyPaymentSignature(
   paymentId: string,
   signature: string
 ): boolean {
-  const { keySecret } = getRazorpaySecrets();
-  const payload = `${orderId}|${paymentId}`;
-  const digest = crypto.createHmac('sha256', keySecret).update(payload).digest('hex');
-  return digest === signature;
+  try {
+    const { keySecret } = getRazorpaySecrets();
+    if (!keySecret) {
+      throw new Error('Razorpay key secret is not configured');
+    }
+    const payload = `${orderId}|${paymentId}`;
+    const digest = crypto.createHmac('sha256', keySecret).update(payload).digest('hex');
+    return digest === signature;
+  } catch (error) {
+    console.error('Error in verifyPaymentSignature:', error);
+    throw error; // Re-throw to let caller handle
+  }
 }
 
 export function verifyWebhookSignature(payload: string, signature: string): boolean {

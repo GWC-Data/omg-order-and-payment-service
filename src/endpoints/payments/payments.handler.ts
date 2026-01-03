@@ -226,11 +226,22 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
   const body = req.body as VerifyPaymentBody;
 
   try {
-    const isValid = verifyPaymentSignature(
-      body.razorpay_order_id,
-      body.razorpay_payment_id,
-      body.razorpay_signature
-    );
+    // Verify payment signature with error handling
+    let isValid: boolean;
+    try {
+      isValid = verifyPaymentSignature(
+        body.razorpay_order_id,
+        body.razorpay_payment_id,
+        body.razorpay_signature
+      );
+    } catch (sigError) {
+      console.error('Error during signature verification:', sigError);
+      res.status(500).json({
+        message: 'Signature verification failed',
+        error: process.env.NODE_ENV === 'development' ? (sigError as Error).message : 'Internal server error'
+      });
+      return;
+    }
 
     if (!isValid) {
       console.error(`Invalid payment signature for order ${body.razorpay_order_id}`);
@@ -282,32 +293,43 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     let createdOrder: Order | null = null;
     
     if (!existingAppOrderId) {
-      createdOrder = await Order.create({
-        // Ensure orderNumber is always set (extra safety). [[memory:12523883]]
-        orderNumber: randomUUID(),
-        userId: body?.userId ?? null,
-        templeId: body?.templeId ?? null,
-        addressId: body.addressId,
-        orderType: body.orderType,
-        status: (body.status as any) ?? 'pending',
-        scheduledDate: body.scheduledDate,
-        scheduledTimestamp: body.scheduledTimestamp,
-        fulfillmentType: body.fulfillmentType,
-        subtotal: body.subtotal,
-        discountAmount: body.discountAmount,
-        convenienceFee: body.convenienceFee,
-        taxAmount: body.taxAmount,
-        totalAmount: body.totalAmount,
-        currency: body.currency ?? order.currency,
-        paymentStatus: 'paid',
-        paymentMethod: 'razorpay',
-        paidAt: new Date(),
-        contactName: body.contactName,
-        contactPhone: body.contactPhone,
-        contactEmail: body.contactEmail ?? order.customerEmail,
-        shippingAddress: body.shippingAddress,
-        deliveryType: body.deliveryType
-      } as any);
+      try {
+        createdOrder = await Order.create({
+          // Ensure orderNumber is always set (extra safety). [[memory:12523883]]
+          orderNumber: randomUUID(),
+          userId: body?.userId ?? null,
+          templeId: body?.templeId ?? null,
+          addressId: body.addressId,
+          orderType: body.orderType,
+          status: (body.status as any) ?? 'pending',
+          scheduledDate: body.scheduledDate,
+          scheduledTimestamp: body.scheduledTimestamp,
+          fulfillmentType: body.fulfillmentType,
+          subtotal: body.subtotal,
+          discountAmount: body.discountAmount,
+          convenienceFee: body.convenienceFee,
+          taxAmount: body.taxAmount,
+          totalAmount: body.totalAmount,
+          currency: body.currency ?? order.currency,
+          paymentStatus: 'paid',
+          paymentMethod: 'razorpay',
+          paidAt: new Date(),
+          contactName: body.contactName,
+          contactPhone: body.contactPhone,
+          contactEmail: body.contactEmail ?? order.customerEmail,
+          shippingAddress: body.shippingAddress,
+          deliveryType: body.deliveryType
+        } as any);
+      } catch (orderCreateError) {
+        console.error('Error creating Order:', orderCreateError);
+        console.error('Order creation error details:', {
+          message: (orderCreateError as Error).message,
+          name: (orderCreateError as Error).name,
+          stack: (orderCreateError as Error).stack
+        });
+        // Re-throw with more context
+        throw new Error(`Failed to create order: ${(orderCreateError as Error).message}`);
+      }
 
       await order.update({
         metadata: {
@@ -405,10 +427,23 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       orderStatusHistory: createdStatusHistory ? [createdStatusHistory] : undefined
     });
   } catch (error) {
-    console.error('verifyPaymentSignatureHandler error:', error);
+    const errorMessage = (error as Error).message || String(error);
+    const errorStack = (error as Error).stack;
+    
+    console.error('verifyPaymentSignatureHandler error:', errorMessage);
+    console.error('Error stack:', errorStack);
+    console.error('Request body:', JSON.stringify(body, null, 2));
+    console.error('Full error object:', error);
+    
+    // Always return detailed error in response for debugging
     res.status(500).json({
       message: 'Unable to verify payment signature',
-      error: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error'
+      error: errorMessage,
+      stack: process.env.NODE_ENV === 'development' ? errorStack : undefined,
+      details: process.env.NODE_ENV === 'development' ? {
+        name: (error as Error).name,
+        body: body
+      } : undefined
     });
   }
 };
