@@ -12,6 +12,23 @@ export interface CreatePaymentOrderBody {
   autoCapture?: boolean;
 }
 
+export interface OrderItemInput {
+  itemType: string;
+  itemId?: string;
+  itemName?: string;
+  itemDescription?: string;
+  itemImageUrl?: string;
+  productId?: string;
+  pujaId?: string;
+  prasadId?: string;
+  dharshanId?: string;
+  quantity?: number;
+  unitPrice?: number;
+  totalPrice?: number;
+  itemDetails?: Record<string, unknown>;
+  status?: string;
+}
+
 export interface VerifyPaymentBody {
   razorpay_order_id: string;
   razorpay_payment_id: string;
@@ -35,6 +52,7 @@ export interface VerifyPaymentBody {
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
+  orderItems?: OrderItemInput[];
 }
 
 export interface CapturePaymentBody {

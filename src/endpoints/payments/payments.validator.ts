@@ -118,7 +118,39 @@ export const verifyPaymentValidator: Schema = {
   currency: { in: 'body', optional: true, isString: { errorMessage: 'currency must be a string' } },
   contactName: { in: 'body', optional: true, isString: { errorMessage: 'contactName must be a string' } },
   contactPhone: { in: 'body', optional: true, isString: { errorMessage: 'contactPhone must be a string' } },
-  contactEmail: { in: 'body', optional: true, isEmail: { errorMessage: 'contactEmail must be a valid email address' } }
+  contactEmail: { in: 'body', optional: true, isEmail: { errorMessage: 'contactEmail must be a valid email address' } },
+  orderItems: {
+    in: 'body',
+    optional: true,
+    isArray: { errorMessage: 'orderItems must be an array' },
+    custom: {
+      options: (value: unknown) => {
+        if (value === undefined || value === null) return true;
+        if (!Array.isArray(value)) return false;
+        // Validate each item in the array
+        for (const item of value) {
+          if (typeof item !== 'object' || item === null) return false;
+          if (!('itemType' in item) || typeof item.itemType !== 'string') return false;
+          // Optional fields validation
+          if ('itemId' in item && item.itemId !== null && typeof item.itemId !== 'string') return false;
+          if ('itemName' in item && item.itemName !== null && typeof item.itemName !== 'string') return false;
+          if ('itemDescription' in item && item.itemDescription !== null && typeof item.itemDescription !== 'string') return false;
+          if ('itemImageUrl' in item && item.itemImageUrl !== null && typeof item.itemImageUrl !== 'string') return false;
+          if ('productId' in item && item.productId !== null && typeof item.productId !== 'string') return false;
+          if ('pujaId' in item && item.pujaId !== null && typeof item.pujaId !== 'string') return false;
+          if ('prasadId' in item && item.prasadId !== null && typeof item.prasadId !== 'string') return false;
+          if ('dharshanId' in item && item.dharshanId !== null && typeof item.dharshanId !== 'string') return false;
+          if ('quantity' in item && item.quantity !== null && typeof item.quantity !== 'number') return false;
+          if ('unitPrice' in item && item.unitPrice !== null && typeof item.unitPrice !== 'number') return false;
+          if ('totalPrice' in item && item.totalPrice !== null && typeof item.totalPrice !== 'number') return false;
+          if ('itemDetails' in item && item.itemDetails !== null && typeof item.itemDetails !== 'object') return false;
+          if ('status' in item && item.status !== null && typeof item.status !== 'string') return false;
+        }
+        return true;
+      },
+      errorMessage: 'orderItems must be an array of valid order item objects with required itemType field'
+    }
+  }
 };
 
 export const capturePaymentValidator: Schema = {

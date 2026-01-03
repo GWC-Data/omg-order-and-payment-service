@@ -60,6 +60,65 @@ VerifyPaymentRequest:
     contactEmail:
       type: string
       format: email
+    orderItems:
+      type: array
+      description: Optional array of order items to be created with the order
+      items:
+        type: object
+        required:
+          - itemType
+        properties:
+          itemType:
+            type: string
+            description: Type of the item (e.g., 'product', 'puja', 'prasad', 'darshan')
+          itemId:
+            type: string
+            format: uuid
+            description: Optional UUID of the item
+          itemName:
+            type: string
+            description: Name of the item
+          itemDescription:
+            type: string
+            description: Description of the item
+          itemImageUrl:
+            type: string
+            format: uri
+            description: URL of the item image
+          productId:
+            type: string
+            format: uuid
+            description: Product ID if item is a product
+          pujaId:
+            type: string
+            format: uuid
+            description: Puja ID if item is a puja
+          prasadId:
+            type: string
+            format: uuid
+            description: Prasad ID if item is a prasad
+          dharshanId:
+            type: string
+            format: uuid
+            description: Darshan ID if item is a darshan
+          quantity:
+            type: integer
+            minimum: 1
+            description: Quantity of the item
+          unitPrice:
+            type: number
+            minimum: 0
+            description: Unit price of the item
+          totalPrice:
+            type: number
+            minimum: 0
+            description: Total price (unitPrice * quantity)
+          itemDetails:
+            type: object
+            description: Additional details about the item as key-value pairs
+          status:
+            type: string
+            description: Status of the order item
 
 
 

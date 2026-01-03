@@ -5,7 +5,7 @@ import {
   EndpointRequestType
 } from 'node-server-engine';
 import { Response } from 'express';
-import { PaymentOrder, PaymentStatus, Order } from 'db/models';
+import { PaymentOrder, PaymentStatus, Order, OrderItem } from 'db/models';
 import { randomUUID } from 'crypto';
 import {
   getRazorpayClient,
@@ -279,8 +279,10 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     // Create app Order (idempotent using PaymentOrder.metadata.appOrderId)
     const metadata = (order.metadata as Record<string, unknown> | undefined) ?? {};
     const existingAppOrderId = (metadata as any).appOrderId as string | undefined;
+    let createdOrder: Order | null = null;
+    
     if (!existingAppOrderId) {
-      const createdOrder = await Order.create({
+      createdOrder = await Order.create({
         // Ensure orderNumber is always set (extra safety). [[memory:12523883]]
         orderNumber: randomUUID(),
         userId: body?.userId ?? null,
@@ -312,13 +314,61 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
           razorpayPaymentId: body.razorpay_payment_id
         }
       } as any);
+    } else {
+      // Fetch existing order if it was already created
+      createdOrder = await Order.findByPk(existingAppOrderId);
+    }
+
+    // Create OrderItems if provided and order exists
+    let createdOrderItems: OrderItem[] = [];
+    if (createdOrder && body.orderItems && Array.isArray(body.orderItems) && body.orderItems.length > 0) {
+      // Check if orderItems already exist for this order (idempotency)
+      const existingOrderItems = await OrderItem.findAll({
+        where: { orderId: createdOrder.id }
+      });
+
+      // Only create orderItems if they don't already exist
+      if (existingOrderItems.length === 0) {
+        try {
+          // Create all orderItems
+          const orderItemsToCreate = body.orderItems.map((item) => ({
+            id: randomUUID(),
+            orderId: createdOrder!.id,
+            itemType: item.itemType,
+            itemId: item.itemId,
+            itemName: item.itemName,
+            itemDescription: item.itemDescription,
+            itemImageUrl: item.itemImageUrl,
+            productId: item.productId,
+            pujaId: item.pujaId,
+            prasadId: item.prasadId,
+            dharshanId: item.dharshanId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+            itemDetails: item.itemDetails,
+            status: item.status
+          }));
+
+          createdOrderItems = await OrderItem.bulkCreate(orderItemsToCreate as any);
+          console.log(`Created ${createdOrderItems.length} orderItems for order ${createdOrder.id}`);
+        } catch (orderItemError) {
+          console.error('Error creating orderItems:', orderItemError);
+          // Log error but don't fail the payment verification
+          // The order is already created, so we continue
+        }
+      } else {
+        console.log(`OrderItems already exist for order ${createdOrder.id}, skipping creation`);
+        createdOrderItems = existingOrderItems;
+      }
     }
 
     console.log(`Payment verified successfully for order ${body.razorpay_order_id}`);
     res.status(200).json({
       message: 'Payment verified successfully',
       order,
-      appOrderId: ((order.metadata as any)?.appOrderId as string | undefined)
+      appOrderId: ((order.metadata as any)?.appOrderId as string | undefined),
+      orderItems: createdOrderItems.length > 0 ? createdOrderItems : undefined
     });
   } catch (error) {
     console.error('verifyPaymentSignatureHandler error:', error);

@@ -133,6 +133,61 @@
                   type: string
                 order:
                   $ref: '#/components/schemas/PaymentOrder'
+                appOrderId:
+                  type: string
+                  format: uuid
+                  description: ID of the created application order
+                orderItems:
+                  type: array
+                  description: Array of order items created for the order (if provided)
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      orderId:
+                        type: string
+                        format: uuid
+                      itemType:
+                        type: string
+                      itemId:
+                        type: string
+                        format: uuid
+                      itemName:
+                        type: string
+                      itemDescription:
+                        type: string
+                      itemImageUrl:
+                        type: string
+                      productId:
+                        type: string
+                        format: uuid
+                      pujaId:
+                        type: string
+                        format: uuid
+                      prasadId:
+                        type: string
+                        format: uuid
+                      dharshanId:
+                        type: string
+                        format: uuid
+                      quantity:
+                        type: integer
+                      unitPrice:
+                        type: number
+                      totalPrice:
+                        type: number
+                      itemDetails:
+                        type: object
+                      status:
+                        type: string
+                      createdAt:
+                        type: string
+                        format: date-time
+                      updatedAt:
+                        type: string
+                        format: date-time
       '400':
         $ref: '#/components/responses/BadRequest'
       '404':
