@@ -5,6 +5,8 @@
     operationId: createPaymentOrder
     tags:
       - Payments
+    security:
+      - bearerAuth: []
     requestBody:
       required: true
       content:
@@ -34,6 +36,8 @@
     operationId: listPaymentOrders
     tags:
       - Payments
+    security:
+      - bearerAuth: []
     parameters:
       - name: userId
         in: query
@@ -82,6 +86,8 @@
     operationId: getPaymentOrder
     tags:
       - Payments
+    security:
+      - bearerAuth: []
     parameters:
       - name: orderId
         in: path
@@ -115,6 +121,8 @@
     operationId: verifyPaymentSignature
     tags:
       - Payments
+    security:
+      - bearerAuth: []
     requestBody:
       required: true
       content:
@@ -200,6 +208,8 @@
     operationId: capturePayment
     tags:
       - Payments
+    security:
+      - bearerAuth: []
     requestBody:
       required: true
       content:
@@ -224,6 +234,38 @@
         $ref: '#/components/responses/BadRequest'
       '502':
         $ref: '#/components/responses/RazorpayError'
+
+/payments/webhook/razorpay:
+  post:
+    summary: Razorpay webhook endpoint
+    description: >
+      Receives webhook events from Razorpay. This endpoint does not require authentication
+      as it uses signature verification for security.
+    operationId: razorpayWebhook
+    tags:
+      - Payments
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            description: Razorpay webhook payload
+    responses:
+      '200':
+        description: Webhook processed successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+      '400':
+        $ref: '#/components/responses/BadRequest'
+      '500':
+        $ref: '#/components/responses/ServerError'
 
 
 
