@@ -52,6 +52,8 @@ export interface VerifyPaymentBody {
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
+  shippingAddress?: string;
+  deliveryType?: 'standard' | 'express';
   orderItems?: OrderItemInput[];
 }
 

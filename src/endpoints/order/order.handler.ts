@@ -63,7 +63,9 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
       contactEmail: req.body.contactEmail,
       cancelledAt: req.body.cancelledAt,
       cancellationReason: req.body.cancellationReason,
-      refundAmount: req.body.refundAmount
+      refundAmount: req.body.refundAmount,
+      shippingAddress: req.body.shippingAddress,
+      deliveryType: req.body.deliveryType
     } as any);
 
     // Create initial OrderStatusHistory
@@ -204,7 +206,9 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
       contactEmail: req.body.contactEmail ?? order.contactEmail,
       cancelledAt: req.body.cancelledAt ?? order.cancelledAt,
       cancellationReason: req.body.cancellationReason ?? order.cancellationReason,
-      refundAmount: req.body.refundAmount ?? order.refundAmount
+      refundAmount: req.body.refundAmount ?? order.refundAmount,
+      shippingAddress: req.body.shippingAddress ?? (order as any).shippingAddress,
+      deliveryType: req.body.deliveryType ?? (order as any).deliveryType
     } as any);
 
     // Create OrderStatusHistory if status changed

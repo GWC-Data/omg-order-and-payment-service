@@ -119,6 +119,12 @@ export const verifyPaymentValidator: Schema = {
   contactName: { in: 'body', optional: true, isString: { errorMessage: 'contactName must be a string' } },
   contactPhone: { in: 'body', optional: true, isString: { errorMessage: 'contactPhone must be a string' } },
   contactEmail: { in: 'body', optional: true, isEmail: { errorMessage: 'contactEmail must be a valid email address' } },
+  shippingAddress: { in: 'body', optional: true, isString: { errorMessage: 'shippingAddress must be a string' } },
+  deliveryType: {
+    in: 'body',
+    optional: true,
+    isIn: { options: [['standard', 'express']], errorMessage: 'deliveryType must be either "standard" or "express"' }
+  },
   orderItems: {
     in: 'body',
     optional: true,

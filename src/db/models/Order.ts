@@ -155,6 +155,15 @@ export class Order extends Model {
 
   @Column({ type: DataType.DECIMAL(10, 2), allowNull: true })
   refundAmount?: string;
+
+  @Column({ type: DataType.TEXT, allowNull: true })
+  shippingAddress?: string;
+
+  @Column({
+    type: DataType.ENUM('standard', 'express'),
+    allowNull: true
+  })
+  deliveryType?: 'standard' | 'express';
 }
 
 

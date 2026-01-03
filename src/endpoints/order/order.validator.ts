@@ -72,7 +72,13 @@ export const createOrderValidator: Schema = {
   contactEmail: { in: 'body', optional: true, isEmail: { errorMessage: 'contactEmail must be a valid email address' } },
   cancelledAt: { in: 'body', optional: true, isISO8601: { errorMessage: 'cancelledAt must be a valid ISO8601 date-time' } },
   cancellationReason: { in: 'body', optional: true, isString: { errorMessage: 'cancellationReason must be a string' } },
-  refundAmount: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'refundAmount must be a number' } }
+  refundAmount: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'refundAmount must be a number' } },
+  shippingAddress: { in: 'body', optional: true, isString: { errorMessage: 'shippingAddress must be a string' } },
+  deliveryType: {
+    in: 'body',
+    optional: true,
+    isIn: { options: [['standard', 'express']], errorMessage: 'deliveryType must be either "standard" or "express"' }
+  }
 };
 
 export const updateOrderValidator: Schema = {
@@ -134,7 +140,13 @@ export const updateOrderValidator: Schema = {
   contactEmail: { in: 'body', optional: true, isEmail: { errorMessage: 'contactEmail must be a valid email address' } },
   cancelledAt: { in: 'body', optional: true, isISO8601: { errorMessage: 'cancelledAt must be a valid ISO8601 date-time' } },
   cancellationReason: { in: 'body', optional: true, isString: { errorMessage: 'cancellationReason must be a string' } },
-  refundAmount: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'refundAmount must be a number' } }
+  refundAmount: { in: 'body', optional: true, toFloat: true, isFloat: { errorMessage: 'refundAmount must be a number' } },
+  shippingAddress: { in: 'body', optional: true, isString: { errorMessage: 'shippingAddress must be a string' } },
+  deliveryType: {
+    in: 'body',
+    optional: true,
+    isIn: { options: [['standard', 'express']], errorMessage: 'deliveryType must be either "standard" or "express"' }
+  }
 };
 
 export const getOrderDetailsValidator: Schema = {

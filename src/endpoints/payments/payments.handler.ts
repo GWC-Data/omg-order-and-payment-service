@@ -304,7 +304,9 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
         paidAt: new Date(),
         contactName: body.contactName,
         contactPhone: body.contactPhone,
-        contactEmail: body.contactEmail ?? order.customerEmail
+        contactEmail: body.contactEmail ?? order.customerEmail,
+        shippingAddress: body.shippingAddress,
+        deliveryType: body.deliveryType
       } as any);
 
       await order.update({
