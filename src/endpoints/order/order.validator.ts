@@ -90,7 +90,7 @@ export const updateOrderValidator: Schema = {
   orderType: {
     in: 'body',
     optional: true,
-    isIn: { options: [['darshan', 'puja', 'prasad', 'product']], errorMessage: 'Invalid order type' }
+    isIn: { options: [['event', 'darshan', 'puja', 'prasad', 'product']], errorMessage: 'Invalid order type' }
   },
   status: {
     in: 'body',
