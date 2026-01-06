@@ -23,6 +23,7 @@ import {
   ORDER_UPDATED_SUCCESS,
   ORDER_UPDATE_ERROR
 } from './order.const';
+import { applyOrderReward } from 'services/rewards/orderReward';
 
 /**
  * Create Order
@@ -33,6 +34,7 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
 ) => {
   try {
     console.log(req,"req");
+    const paymentStatus = req.body.paymentStatus ?? 'pending';
     const order = await Order.create({
       // Ensure orderNumber is always set (model may not define a default).
       orderNumber: randomUUID(),
@@ -86,6 +88,16 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
     }
 
     sendSuccessResponse(res, 201, ORDER_CREATED_SUCCESS, { order });
+
+    // Best-effort: apply order reward if already paid and eligible
+    if ((order as any).orderType && paymentStatus === 'paid') {
+      applyOrderReward(
+        String(order.userId),
+        String(order.id),
+        String((order as any).orderType),
+        String((order as any).orderNumber)
+      ).catch(reportError);
+    }
   } catch (error) {
     reportError(error);
     sendErrorResponse(res, 500, ORDER_CREATE_ERROR, error);
@@ -177,12 +189,15 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
 
     const oldStatus = order.status;
     const newStatus = req.body.status ?? order.status;
+    const oldPaymentStatus = order.paymentStatus;
+    const newPaymentStatus = req.body.paymentStatus ?? order.paymentStatus;
+    const newOrderType = req.body.orderType ?? order.orderType;
 
     await order.update({
       userId: req.body.userId ?? order.userId,
       templeId: req.body.templeId ?? order.templeId,
       addressId: req.body.addressId ?? (order as any).addressId,
-      orderType: req.body.orderType ?? order.orderType,
+      orderType: newOrderType,
       status: newStatus,
       scheduledDate: req.body.scheduledDate ?? order.scheduledDate,
       scheduledTimestamp: req.body.scheduledTimestamp ?? order.scheduledTimestamp,
@@ -193,7 +208,7 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
       taxAmount: req.body.taxAmount ?? order.taxAmount,
       totalAmount: req.body.totalAmount ?? order.totalAmount,
       currency: req.body.currency ?? order.currency,
-      paymentStatus: req.body.paymentStatus ?? order.paymentStatus,
+      paymentStatus: newPaymentStatus,
       paymentMethod: req.body.paymentMethod ?? order.paymentMethod,
       paymentId: req.body.paymentId ?? order.paymentId,
       paidAt: req.body.paidAt ?? order.paidAt,
@@ -227,6 +242,16 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
         console.error('Error creating order status history:', statusHistoryError);
         // Log error but don't fail the order update
       }
+    }
+
+    // Best-effort: apply order reward when payment transitions to paid
+    if (oldPaymentStatus !== 'paid' && newPaymentStatus === 'paid') {
+      applyOrderReward(
+        String(order.userId),
+        String(order.id),
+        String(newOrderType),
+        String((order as any).orderNumber)
+      ).catch(reportError);
     }
 
     sendSuccessResponse(res, 200, ORDER_UPDATED_SUCCESS, { order });

@@ -1,6 +1,6 @@
 import { Table, Column, Model, DataType, Index, PrimaryKey, Default } from 'sequelize-typescript';
 
-export type OrderType = 'darshan' | 'puja' | 'prasad' | 'product';
+export type OrderType = 'darshan' | 'puja' | 'prasad' | 'product' | 'event';
 
 export type OrderStatus =
   | 'pending'
@@ -58,7 +58,7 @@ export class Order extends Model {
   addressId?: string;
 
   @Column({
-    type: DataType.ENUM('darshan', 'puja', 'prasad', 'product'),
+    type: DataType.ENUM('darshan', 'puja', 'prasad', 'product', 'event'),
     allowNull: false
   })
   orderType!: OrderType;
