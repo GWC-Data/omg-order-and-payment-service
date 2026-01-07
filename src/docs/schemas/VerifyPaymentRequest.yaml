@@ -125,6 +125,64 @@ VerifyPaymentRequest:
           status:
             type: string
             description: Status of the order item
+    rudrakshaBookingData:
+      type: object
+      description: Optional Rudraksha booking data to create booking after order creation
+      properties:
+        userId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        phoneNumber:
+          type: string
+        addressText:
+          type: string
+        addressPlaceId:
+          type: string
+          nullable: true
+        addressLat:
+          type: number
+          nullable: true
+        addressLng:
+          type: number
+          nullable: true
+        age:
+          type: integer
+          minimum: 1
+          nullable: true
+        gender:
+          type: string
+        participatingInEvent:
+          type: boolean
+        preferredDate:
+          type: string
+          format: date
+          nullable: true
+        preferredTimeSlot:
+          type: string
+          nullable: true
+        numberOfPeople:
+          type: integer
+          minimum: 1
+          nullable: true
+        members:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              idName:
+                type: string
+              idAge:
+                type: integer
+                minimum: 1
+                nullable: true
+              idGender:
+                type: string
+        rudrakshaQuantity:
+          type: integer
+          minimum: 1
 
 
 

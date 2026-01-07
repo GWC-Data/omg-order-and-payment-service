@@ -156,6 +156,11 @@ export const verifyPaymentValidator: Schema = {
       },
       errorMessage: 'orderItems must be an array of valid order item objects with required itemType field'
     }
+  },
+  rudrakshaBookingData: {
+    in: 'body',
+    optional: true,
+    ...jsonObjectValidator
   }
 };
 

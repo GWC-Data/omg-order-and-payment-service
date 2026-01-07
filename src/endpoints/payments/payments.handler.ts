@@ -2,7 +2,9 @@
 import {
   EndpointAuthType,
   EndpointHandler,
-  EndpointRequestType
+  EndpointRequestType,
+  request,
+  reportError
 } from 'node-server-engine';
 import { Response } from 'express';
 import { PaymentOrder, PaymentStatus, Order, OrderItem, OrderStatusHistory } from 'db/models';
@@ -446,6 +448,41 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
           razorpayPaymentId: body.razorpay_payment_id
         }
       } as any);
+
+      // Create RudrakshaBooking if booking data is provided (best-effort, don't fail payment verification)
+      if (body.rudrakshaBookingData && createdOrder.id) {
+        try {
+          const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
+          if (appcontrolUrl) {
+            const bookingPayload = {
+              ...body.rudrakshaBookingData,
+              orderId: createdOrder.id
+            };
+
+            // Get access token from request headers if available
+            const accessToken = req.headers.authorization;
+
+            await request({
+              method: 'POST',
+              url: `${appcontrolUrl}/launch-event/rudraksha-booking`,
+              headers: {
+                'Content-Type': 'application/json',
+                ...(accessToken ? { Authorization: accessToken.startsWith('Bearer ') ? accessToken : `Bearer ${accessToken}` } : {})
+              },
+              data: bookingPayload,
+              timeout: 10000
+            });
+
+            console.log(`[SUCCESS] Created RudrakshaBooking for Order ${createdOrder.id}`);
+          } else {
+            console.warn('[WARN] APPCONTROL_SERVICE_URL not configured; skipping RudrakshaBooking creation');
+          }
+        } catch (bookingError) {
+          // Best-effort: log error but don't fail payment verification
+          console.error('[ERROR] Failed to create RudrakshaBooking:', bookingError);
+          reportError(bookingError);
+        }
+      }
     } else {
       // Fetch existing order if it was already created
       createdOrder = await Order.findByPk(existingAppOrderId);

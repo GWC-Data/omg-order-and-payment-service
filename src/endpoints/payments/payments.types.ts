@@ -29,6 +29,28 @@ export interface OrderItemInput {
   status?: string;
 }
 
+export interface RudrakshaBookingData {
+  userId: string;
+  fullName: string;
+  phoneNumber: string;
+  addressText: string;
+  addressPlaceId?: string;
+  addressLat?: number;
+  addressLng?: number;
+  age?: number;
+  gender: string;
+  participatingInEvent: boolean;
+  preferredDate?: string;
+  preferredTimeSlot?: string;
+  numberOfPeople?: number;
+  members?: Array<{
+    idName: string;
+    idAge?: number;
+    idGender: string;
+  }>;
+  rudrakshaQuantity: number;
+}
+
 export interface VerifyPaymentBody {
   razorpay_order_id: string;
   razorpay_payment_id: string;
@@ -55,6 +77,9 @@ export interface VerifyPaymentBody {
   shippingAddress?: string;
   deliveryType?: 'standard' | 'express';
   orderItems?: OrderItemInput[];
+  
+  // Rudraksha booking data (optional, only for rudraksha bookings)
+  rudrakshaBookingData?: RudrakshaBookingData;
 }
 
 export interface CapturePaymentBody {
