@@ -342,6 +342,7 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     // Create app Order (idempotent using PaymentOrder.metadata.appOrderId)
     const metadata = (order.metadata as Record<string, unknown> | undefined) ?? {};
     const existingAppOrderId = (metadata as any).appOrderId as string | undefined;
+    const bookingId = (metadata as any).bookingId as string | undefined; // Extract bookingId from PaymentOrder metadata
     let createdOrder: Order | null = null;
     
     if (!existingAppOrderId) {
@@ -357,6 +358,11 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
           paymentMethod: 'razorpay',
           paidAt: new Date()
         };
+        
+        // Store bookingId in Order metadata if present
+        if (bookingId) {
+          orderData.metadata = { bookingId };
+        }
 
         // Add optional fields only if they exist
         if (body.templeId) orderData.templeId = body.templeId;
