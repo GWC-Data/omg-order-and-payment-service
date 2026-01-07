@@ -105,20 +105,34 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
 };
 
 /**
- * Get Order by Id
+ * Get Order by Id (with OrderItems and OrderStatusHistory)
  */
 export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.JWT> = async (
   req: EndpointRequestType[EndpointAuthType.JWT],
   res: Response
 ) => {
   try {
-    const order = await Order.findByPk(req.params.id);
+    const orderId = String(req.params.id);
+    const order = await Order.findByPk(orderId);
     if (!order) {
       sendErrorResponse(res, 404, ORDER_NOT_FOUND);
       return;
     }
 
-    sendSuccessResponse(res, 200, ORDER_FETCH_SUCCESS, { order });
+    // Fetch OrderItems and OrderStatusHistory
+    const [items, statusHistory] = await Promise.all([
+      OrderItem.findAll({ where: { orderId }, order: [['createdAt', 'ASC']] }),
+      OrderStatusHistory.findAll({
+        where: { orderId },
+        order: [['createdAt', 'DESC']]
+      })
+    ]);
+
+    sendSuccessResponse(res, 200, ORDER_FETCH_SUCCESS, {
+      order,
+      orderItems: items,
+      orderStatusHistory: statusHistory
+    });
   } catch (error) {
     reportError(error);
     sendErrorResponse(res, 500, ORDER_FETCH_ERROR, error);
@@ -126,7 +140,7 @@ export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.JWT> = async 
 };
 
 /**
- * Get All Orders (basic filtering + pagination)
+ * Get All Orders (basic filtering + pagination) with OrderItems and OrderStatusHistory
  */
 export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.JWT> = async (
   req: EndpointRequestType[EndpointAuthType.JWT],
@@ -158,8 +172,55 @@ export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.JWT> = async 
       order: [['createdAt', 'DESC']]
     });
 
+    // Fetch OrderItems and OrderStatusHistory for all orders in batch
+    const orderIds = orders.map(order => order.id);
+    const [allItems, allStatusHistory] = await Promise.all([
+      orderIds.length > 0
+        ? OrderItem.findAll({
+            where: { orderId: { [Op.in]: orderIds } },
+            order: [['createdAt', 'ASC']]
+          })
+        : Promise.resolve([]),
+      orderIds.length > 0
+        ? OrderStatusHistory.findAll({
+            where: { orderId: { [Op.in]: orderIds } },
+            order: [['createdAt', 'DESC']]
+          })
+        : Promise.resolve([])
+    ]);
+
+    // Group items and status history by orderId
+    const itemsByOrderId: Record<string, any[]> = {};
+    const statusHistoryByOrderId: Record<string, any[]> = {};
+
+    for (const item of allItems) {
+      const orderId = String((item as any).orderId);
+      if (!itemsByOrderId[orderId]) {
+        itemsByOrderId[orderId] = [];
+      }
+      itemsByOrderId[orderId].push(item);
+    }
+
+    for (const history of allStatusHistory) {
+      const orderId = String((history as any).orderId);
+      if (!statusHistoryByOrderId[orderId]) {
+        statusHistoryByOrderId[orderId] = [];
+      }
+      statusHistoryByOrderId[orderId].push(history);
+    }
+
+    // Attach items and status history to each order
+    const ordersWithDetails = orders.map(order => {
+      const orderId = String(order.id);
+      return {
+        ...order.toJSON(),
+        orderItems: itemsByOrderId[orderId] || [],
+        orderStatusHistory: statusHistoryByOrderId[orderId] || []
+      };
+    });
+
     sendSuccessResponse(res, 200, ORDER_LIST_SUCCESS, {
-      orders,
+      orders: ordersWithDetails,
       pagination: {
         page,
         limit,
