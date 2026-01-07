@@ -449,8 +449,8 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
         }
       } as any);
 
-      // Create RudrakshaBooking if booking data is provided (best-effort, don't fail payment verification)
-      if (body.rudrakshaBookingData && createdOrder.id) {
+      // Create RudrakshaBooking only if orderType is "event" and booking data is provided (best-effort, don't fail payment verification)
+      if (body.orderType === 'event' && body.rudrakshaBookingData && createdOrder.id) {
         try {
           const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
           if (appcontrolUrl) {

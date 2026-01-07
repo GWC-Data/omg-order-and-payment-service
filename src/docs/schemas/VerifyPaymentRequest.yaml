@@ -27,7 +27,7 @@ VerifyPaymentRequest:
       format: uuid
     orderType:
       type: string
-      enum: [darshan, puja, prasad, product]
+      enum: [darshan, puja, prasad, product, event]
     status:
       type: string
       enum: [pending, confirmed, processing, ready, shipped, completed, cancelled, refunded]

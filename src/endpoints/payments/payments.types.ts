@@ -60,7 +60,7 @@ export interface VerifyPaymentBody {
   userId: string;
   templeId?: string;
   addressId?: string;
-  orderType: 'darshan' | 'puja' | 'prasad' | 'product';
+  orderType: 'darshan' | 'puja' | 'prasad' | 'product' | 'event';
   status?: string;
   scheduledDate?: string;
   scheduledTimestamp?: string;

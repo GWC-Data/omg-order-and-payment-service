@@ -80,7 +80,7 @@ export const verifyPaymentValidator: Schema = {
     in: 'body',
     exists: { errorMessage: 'Order type is required' },
     isIn: {
-      options: [['darshan', 'puja', 'prasad', 'product']],
+      options: [['darshan', 'puja', 'prasad', 'product', 'event']],
       errorMessage: 'Invalid order type'
     }
   },
