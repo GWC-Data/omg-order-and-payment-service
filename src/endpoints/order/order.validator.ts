@@ -157,4 +157,58 @@ export const getOrderDetailsValidator: Schema = {
   }
 };
 
+export const getOrdersByUserIdValidator: Schema = {
+  userId: {
+    in: 'params',
+    exists: { errorMessage: 'User ID is required' },
+    isUUID: { errorMessage: 'User ID must be a valid UUID' }
+  },
+  page: {
+    in: 'query',
+    optional: true,
+    isInt: { options: { min: 1 }, errorMessage: 'page must be a positive integer' },
+    toInt: true
+  },
+  limit: {
+    in: 'query',
+    optional: true,
+    isInt: { options: { min: 1, max: 100 }, errorMessage: 'limit must be between 1 and 100' },
+    toInt: true
+  },
+  orderType: {
+    in: 'query',
+    optional: true,
+    isIn: {
+      options: [['darshan', 'puja', 'prasad', 'product', 'event']],
+      errorMessage: 'Invalid order type'
+    }
+  },
+  status: {
+    in: 'query',
+    optional: true,
+    isIn: {
+      options: [['pending', 'confirmed', 'processing', 'ready', 'shipped', 'completed', 'cancelled', 'refunded']],
+      errorMessage: 'Invalid status'
+    }
+  },
+  paymentStatus: {
+    in: 'query',
+    optional: true,
+    isIn: {
+      options: [['pending', 'paid', 'failed', 'refunded']],
+      errorMessage: 'Invalid payment status'
+    }
+  },
+  startDate: {
+    in: 'query',
+    optional: true,
+    isISO8601: { errorMessage: 'startDate must be a valid ISO8601 date (YYYY-MM-DD)' }
+  },
+  endDate: {
+    in: 'query',
+    optional: true,
+    isISO8601: { errorMessage: 'endDate must be a valid ISO8601 date (YYYY-MM-DD)' }
+  }
+};
+
 

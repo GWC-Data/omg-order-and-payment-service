@@ -6,10 +6,11 @@ import {
   getAllOrdersHandler,
   getOrderDetailsHandler,
   getOrderByIdHandler,
+  getOrdersByUserIdHandler,
   updateOrderHandler
 } from './order.handler';
 
-import { createOrderValidator, getOrderDetailsValidator, updateOrderValidator } from './order.validator';
+import { createOrderValidator, getOrderDetailsValidator, getOrdersByUserIdValidator, updateOrderValidator } from './order.validator';
 
 export const createOrderEndpoint = new Endpoint({
   path: '/orders',
@@ -35,6 +36,15 @@ export const getOrderByIdEndpoint = new Endpoint({
   handler: getOrderByIdHandler,
   authType: EndpointAuthType.JWT,
   validator: {},
+  middleware: [middleware.checkPermission('GetOrder')]
+});
+
+export const getOrdersByUserIdEndpoint = new Endpoint({
+  path: '/orders/user/:userId',
+  method: EndpointMethod.GET,
+  handler: getOrdersByUserIdHandler,
+  authType: EndpointAuthType.JWT,
+  validator: getOrdersByUserIdValidator,
   middleware: [middleware.checkPermission('GetOrder')]
 });
 

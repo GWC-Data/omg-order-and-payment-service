@@ -378,4 +378,101 @@ export const getOrderDetailsHandler: EndpointHandler<EndpointAuthType.JWT> = asy
   }
 };
 
+/**
+ * Get Orders by User ID (with OrderItems and OrderStatusHistory)
+ */
+export const getOrdersByUserIdHandler: EndpointHandler<EndpointAuthType.JWT> = async (
+  req: EndpointRequestType[EndpointAuthType.JWT],
+  res: Response
+) => {
+  try {
+    const userId = String(req.params.userId);
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const offset = (page - 1) * limit;
+
+    const where: WhereOptions<any> = {
+      userId
+    };
+
+    // Optional filters
+    if (req.query.orderType) where.orderType = req.query.orderType;
+    if (req.query.status) where.status = req.query.status;
+    if (req.query.paymentStatus) where.paymentStatus = req.query.paymentStatus;
+
+    if (req.query.startDate || req.query.endDate) {
+      where.scheduledDate = {};
+      if (req.query.startDate) (where.scheduledDate as any)[Op.gte] = req.query.startDate;
+      if (req.query.endDate) (where.scheduledDate as any)[Op.lte] = req.query.endDate;
+    }
+
+    const { count, rows: orders } = await Order.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Fetch OrderItems and OrderStatusHistory for all orders in batch
+    const orderIds = orders.map(order => order.id);
+    const [allItems, allStatusHistory] = await Promise.all([
+      orderIds.length > 0
+        ? OrderItem.findAll({
+            where: { orderId: { [Op.in]: orderIds } },
+            order: [['createdAt', 'ASC']]
+          })
+        : Promise.resolve([]),
+      orderIds.length > 0
+        ? OrderStatusHistory.findAll({
+            where: { orderId: { [Op.in]: orderIds } },
+            order: [['createdAt', 'DESC']]
+          })
+        : Promise.resolve([])
+    ]);
+
+    // Group items and status history by orderId
+    const itemsByOrderId: Record<string, any[]> = {};
+    const statusHistoryByOrderId: Record<string, any[]> = {};
+
+    for (const item of allItems) {
+      const orderId = String((item as any).orderId);
+      if (!itemsByOrderId[orderId]) {
+        itemsByOrderId[orderId] = [];
+      }
+      itemsByOrderId[orderId].push(item);
+    }
+
+    for (const history of allStatusHistory) {
+      const orderId = String((history as any).orderId);
+      if (!statusHistoryByOrderId[orderId]) {
+        statusHistoryByOrderId[orderId] = [];
+      }
+      statusHistoryByOrderId[orderId].push(history);
+    }
+
+    // Attach items and status history to each order
+    const ordersWithDetails = orders.map(order => {
+      const orderId = String(order.id);
+      return {
+        ...order.toJSON(),
+        orderItems: itemsByOrderId[orderId] || [],
+        orderStatusHistory: statusHistoryByOrderId[orderId] || []
+      };
+    });
+
+    sendSuccessResponse(res, 200, ORDER_LIST_SUCCESS, {
+      orders: ordersWithDetails,
+      pagination: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    reportError(error);
+    sendErrorResponse(res, 500, ORDER_FETCH_ERROR, error);
+  }
+};
+
 

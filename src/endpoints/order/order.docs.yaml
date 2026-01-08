@@ -149,6 +149,125 @@
       '500':
         description: Server error
 
+/orders/user/{userId}:
+  get:
+    summary: Get orders by user ID
+    operationId: getOrdersByUserId
+    description: Fetches all orders for a specific user with OrderItems and OrderStatusHistory. Supports pagination and optional filtering.
+    tags:
+      - Orders
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: The user ID to fetch orders for
+      - name: page
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1, default: 1 }
+        description: Page number for pagination
+      - name: limit
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        description: Number of orders per page
+      - name: orderType
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [darshan, puja, prasad, product, event]
+        description: Filter orders by type
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [pending, confirmed, processing, ready, shipped, completed, cancelled, refunded]
+        description: Filter orders by status
+      - name: paymentStatus
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [pending, paid, failed, refunded]
+        description: Filter orders by payment status
+      - name: startDate
+        in: query
+        required: false
+        schema: { type: string, format: date }
+        description: Filter orders scheduled on or after this date (YYYY-MM-DD)
+      - name: endDate
+        in: query
+        required: false
+        schema: { type: string, format: date }
+        description: Filter orders scheduled on or before this date (YYYY-MM-DD)
+    responses:
+      '200':
+        description: Orders fetched successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                message:
+                  type: string
+                data:
+                  type: object
+                  properties:
+                    orders:
+                      type: array
+                      description: Array of orders with OrderItems and OrderStatusHistory
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          userId:
+                            type: string
+                            format: uuid
+                          orderType:
+                            type: string
+                          status:
+                            type: string
+                          paymentStatus:
+                            type: string
+                          totalAmount:
+                            type: string
+                          orderItems:
+                            type: array
+                            description: Array of order items
+                            items:
+                              type: object
+                          orderStatusHistory:
+                            type: array
+                            description: Array of status history entries
+                            items:
+                              type: object
+                    pagination:
+                      type: object
+                      properties:
+                        page:
+                          type: integer
+                        limit:
+                          type: integer
+                        total:
+                          type: integer
+                        totalPages:
+                          type: integer
+      '400':
+        description: Bad request - invalid userId or query parameters
+      '401':
+        description: Unauthorized
+      '500':
+        description: Server error
+
 /orders/{orderId}/details:
   get:
     summary: Get order details (order + items + status history)
