@@ -323,11 +323,15 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       status: 'paid' as PaymentStatus
     });
 
-    // Validate required fields before creating Order
+    // Store orderData in PaymentOrder.metadata for webhook access
+    // Order creation will happen in webhook handlers (handlePaymentCaptured or handleOrderPaid)
+    const metadata = (order.metadata as Record<string, unknown> | undefined) ?? {};
+    
+    // Validate required fields for storing orderData
     if (!body.userId) {
       console.error('[ERROR] userId is required but missing in request body');
       res.status(400).json({ 
-        message: 'User ID is required to create order',
+        message: 'User ID is required to store order data',
         error: 'userId is missing from request body'
       });
       return;
@@ -336,408 +340,52 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     if (!body.orderType) {
       console.error('[ERROR] orderType is required but missing in request body');
       res.status(400).json({ 
-        message: 'Order type is required to create order',
+        message: 'Order type is required to store order data',
         error: 'orderType is missing from request body'
       });
       return;
     }
 
-    // Check for duplicate Rudraksha booking if orderType is 'event' and booking data is provided
-    if (body.orderType === 'event' && body.rudrakshaBookingData) {
-      const bookingData = body.rudrakshaBookingData;
-      if (bookingData.preferredDate && bookingData.preferredTimeSlot) {
-        try {
-          const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
-          if (appcontrolUrl) {
-            const accessToken = req.headers.authorization;
-            
-            // Fetch existing bookings for this user
-            const bookingsUrl = `${appcontrolUrl}/launch-event/rudraksha-bookings?userId=${encodeURIComponent(bookingData.userId)}`;
-            const bookingsRes: any = await request({
-              method: 'GET',
-              url: bookingsUrl,
-              headers: {
-                ...(accessToken ? { 'Authorization': accessToken.startsWith('Bearer ') ? accessToken : `Bearer ${accessToken}` } : {}),
-                'Content-Type': 'application/json'
-              },
-              timeout: 10000
-            });
-
-            // Check if any existing booking matches the same date and time slot
-            if (bookingsRes?.data?.success && bookingsRes?.data?.data?.bookings) {
-              const existingBookings = Array.isArray(bookingsRes.data.data.bookings) 
-                ? bookingsRes.data.data.bookings 
-                : [];
-              
-              // Normalize the preferredDate format (remove time if present)
-              const normalizedPreferredDate = bookingData.preferredDate?.includes('T')
-                ? bookingData.preferredDate.split('T')[0]
-                : bookingData.preferredDate;
-
-              if (!normalizedPreferredDate || !bookingData.preferredTimeSlot) {
-                // Skip duplicate check if date or time slot is missing
-                console.warn('[DUPLICATE_BOOKING] Skipping duplicate check: preferredDate or preferredTimeSlot missing');
-              } else {
-                const duplicateBooking = existingBookings.find((booking: any) => {
-                  // Handle new object format
-                  if (booking.preferredTimeSlot && typeof booking.preferredTimeSlot === 'object' && !Array.isArray(booking.preferredTimeSlot)) {
-                    // New format: object with date keys
-                    const timeSlots = booking.preferredTimeSlot[normalizedPreferredDate];
-                    if (timeSlots) {
-                      const slotArray = Array.isArray(timeSlots) ? timeSlots : [timeSlots];
-                      return slotArray.includes(bookingData.preferredTimeSlot);
-                    }
-                    return false;
-                  } else if (Array.isArray(booking.preferredDate) && Array.isArray(booking.preferredTimeSlot)) {
-                    // Old format: arrays (backward compatibility)
-                    const existingDates = booking.preferredDate;
-                    const existingTimeSlots = booking.preferredTimeSlot;
-                    for (let i = 0; i < existingDates.length; i++) {
-                      const existingDate = existingDates[i]?.includes('T')
-                        ? existingDates[i].split('T')[0]
-                        : existingDates[i];
-                      if (existingDate === normalizedPreferredDate && existingTimeSlots[i] === bookingData.preferredTimeSlot) {
-                        return true;
-                      }
-                    }
-                    return false;
-                  } else {
-                    // Legacy single value format
-                    const existingDate = booking.preferredDate 
-                      ? (typeof booking.preferredDate === 'string' && booking.preferredDate.includes('T') 
-                          ? booking.preferredDate.split('T')[0] 
-                          : booking.preferredDate)
-                      : null;
-                    return (
-                      existingDate === normalizedPreferredDate &&
-                      booking.preferredTimeSlot === bookingData.preferredTimeSlot
-                    );
-                  }
-                });
-
-                if (duplicateBooking) {
-                  console.warn(`[DUPLICATE_BOOKING] User ${bookingData.userId} already has a booking for date ${normalizedPreferredDate} and time slot ${bookingData.preferredTimeSlot}`);
-                  res.status(400).json({
-                    message: DUPLICATE_RUDRAKSHA_BOOKING_ERROR,
-                    error: 'DUPLICATE_BOOKING_ERROR'
-                  });
-                  return;
-                }
-              }
-            }
-          } else {
-            console.warn('[WARN] APPCONTROL_SERVICE_URL not configured; skipping duplicate booking check');
-          }
-        } catch (duplicateCheckError) {
-          // Log error but don't fail payment verification - best-effort validation
-          console.error('[ERROR] Failed to check for duplicate booking:', duplicateCheckError);
-          reportError(duplicateCheckError);
-          // Continue with order creation even if duplicate check fails
-        }
-      }
-    }
-
-    // Create app Order (idempotent using PaymentOrder.metadata.appOrderId)
-    const metadata = (order.metadata as Record<string, unknown> | undefined) ?? {};
-    const existingAppOrderId = (metadata as any).appOrderId as string | undefined;
-    const bookingId = (metadata as any).bookingId as string | undefined; // Extract bookingId from PaymentOrder metadata
-    let createdOrder: Order | null = null;
-    
-    if (!existingAppOrderId) {
-      try {
-        // Prepare order data with all required fields
-        const orderData: any = {
-          // Ensure orderNumber is always set (extra safety). [[memory:12523883]]
-          orderNumber: randomUUID(),
-          userId: body.userId, // Required - validated above
-          orderType: body.orderType, // Required - validated above
-          status: (body.status as any) ?? 'pending',
-          paymentStatus: 'paid',
-          paymentMethod: 'razorpay',
-          paidAt: new Date()
-        };
-        
-        // Store bookingId in Order metadata if present
-        if (bookingId) {
-          orderData.metadata = { bookingId };
-        }
-
-        // Add optional fields only if they exist
-        if (body.templeId) orderData.templeId = body.templeId;
-        if (body.addressId) orderData.addressId = body.addressId;
-        if (body.scheduledDate) orderData.scheduledDate = body.scheduledDate;
-        if (body.scheduledTimestamp) orderData.scheduledTimestamp = body.scheduledTimestamp;
-        if (body.fulfillmentType) orderData.fulfillmentType = body.fulfillmentType;
-        if (body.subtotal !== undefined) orderData.subtotal = String(body.subtotal);
-        if (body.discountAmount !== undefined) orderData.discountAmount = String(body.discountAmount);
-        if (body.convenienceFee !== undefined) orderData.convenienceFee = String(body.convenienceFee);
-        if (body.taxAmount !== undefined) orderData.taxAmount = String(body.taxAmount);
-        if (body.totalAmount !== undefined) orderData.totalAmount = String(body.totalAmount);
-        if (body.currency) orderData.currency = body.currency;
-        else if (order.currency) orderData.currency = order.currency;
-        if (body.contactName) orderData.contactName = body.contactName;
-        if (body.contactPhone) orderData.contactPhone = body.contactPhone;
-        if (body.contactEmail) orderData.contactEmail = body.contactEmail;
-        else if (order.customerEmail) orderData.contactEmail = order.customerEmail;
-        if (body.shippingAddress) orderData.shippingAddress = body.shippingAddress;
-        if (body.deliveryType) orderData.deliveryType = body.deliveryType;
-
-        console.log('[DEBUG] Creating Order with data:', {
-          userId: orderData.userId,
-          orderType: orderData.orderType,
-          status: orderData.status,
-          paymentStatus: orderData.paymentStatus
-        });
-
-        // Explicitly set id (UUID generation) - this ensures we have the id immediately
-        const orderId = randomUUID();
-        orderData.id = orderId;
-
-        createdOrder = await Order.create(orderData);
-        
-        // Verify order was created
-        if (!createdOrder) {
-          throw new Error('Order creation returned null/undefined');
-        }
-        
-        // Ensure id is accessible - use the one we set if model doesn't have it
-        // This handles cases where Sequelize doesn't return the id immediately
-        if (!createdOrder.id) {
-          (createdOrder as any).id = orderId;
-          console.warn('[WARN] Order.id was not set by Sequelize, using generated id');
-        }
-        
-        console.log(`[SUCCESS] Created Order ${createdOrder.id} for PaymentOrder ${body.razorpay_order_id}`);
-      } catch (orderCreateError) {
-        const error = orderCreateError as Error;
-        console.error('[ERROR] Failed to create Order:', error.message);
-        console.error('[ERROR] Order creation error details:', {
-          name: error.name,
-          message: error.message,
-          stack: error.stack,
-          orderData: {
-            userId: body.userId,
-            orderType: body.orderType,
-            status: (body.status as any) ?? 'pending'
-          }
-        });
-        
-        // Check for specific database errors
-        if (error.message.includes('null value') || error.message.includes('NOT NULL')) {
-          throw new Error(`Database constraint violation: ${error.message}. Check that all required fields are provided.`);
-        }
-        if (error.message.includes('violates foreign key') || error.message.includes('FOREIGN KEY')) {
-          throw new Error(`Foreign key violation: ${error.message}. Check that userId, templeId, or addressId exist in their respective tables.`);
-        }
-        if (error.message.includes('duplicate key') || error.message.includes('UNIQUE')) {
-          throw new Error(`Duplicate key violation: ${error.message}. Order may already exist.`);
-        }
-        
-        // Re-throw with more context
-        throw new Error(`Failed to create order: ${error.message}`);
-      }
+    // Store complete order data in metadata if not already stored (for webhook access)
+    if (!(metadata as any).orderData) {
+      const orderDataToStore = {
+        userId: body.userId,
+        orderType: body.orderType,
+        templeId: body.templeId,
+        addressId: body.addressId,
+        status: body.status,
+        scheduledDate: body.scheduledDate,
+        scheduledTimestamp: body.scheduledTimestamp,
+        fulfillmentType: body.fulfillmentType,
+        subtotal: body.subtotal,
+        discountAmount: body.discountAmount,
+        convenienceFee: body.convenienceFee,
+        taxAmount: body.taxAmount,
+        totalAmount: body.totalAmount,
+        currency: body.currency,
+        contactName: body.contactName,
+        contactPhone: body.contactPhone,
+        contactEmail: body.contactEmail,
+        shippingAddress: body.shippingAddress,
+        deliveryType: body.deliveryType,
+        orderItems: body.orderItems,
+        rudrakshaBookingData: body.rudrakshaBookingData
+      };
 
       await order.update({
         metadata: {
           ...metadata,
-          appOrderId: createdOrder.id,
+          orderData: orderDataToStore,
           razorpayPaymentId: body.razorpay_payment_id
         }
       } as any);
-
-      // Create RudrakshaBooking only if orderType is "event" and booking data is provided (best-effort, don't fail payment verification)
-      if (body.orderType === 'event' && body.rudrakshaBookingData && createdOrder.id) {
-        try {
-          const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
-          if (appcontrolUrl) {
-            const bookingPayload = {
-              ...body.rudrakshaBookingData,
-              orderId: createdOrder.id
-            };
-
-            // Get access token from request headers if available
-            const accessToken = req.headers.authorization;
-
-            await request({
-              method: 'POST',
-              url: `${appcontrolUrl}/launch-event/rudraksha-booking`,
-              headers: {
-                'Content-Type': 'application/json',
-                ...(accessToken ? { Authorization: accessToken.startsWith('Bearer ') ? accessToken : `Bearer ${accessToken}` } : {})
-              },
-              data: bookingPayload,
-              timeout: 10000
-            });
-
-            console.log(`[SUCCESS] Created RudrakshaBooking for Order ${createdOrder.id}`);
-          } else {
-            console.warn('[WARN] APPCONTROL_SERVICE_URL not configured; skipping RudrakshaBooking creation');
-          }
-        } catch (bookingError) {
-          // Best-effort: log error but don't fail payment verification
-          console.error('[ERROR] Failed to create RudrakshaBooking:', bookingError);
-          reportError(bookingError);
-        }
-      }
-    } else {
-      // Fetch existing order if it was already created
-      createdOrder = await Order.findByPk(existingAppOrderId);
     }
 
-    // Create OrderItems if provided and order exists
-    let createdOrderItems: OrderItem[] = [];
-    
-    // Log orderItems creation attempt status
-    console.log('[DEBUG] OrderItems creation check:', {
-      hasCreatedOrder: !!createdOrder,
-      hasOrderItems: !!body.orderItems,
-      isOrderItemsArray: Array.isArray(body.orderItems),
-      orderItemsLength: body.orderItems?.length || 0,
-      orderId: createdOrder?.id || 'N/A'
-    });
-
-    if (createdOrder && body.orderItems && Array.isArray(body.orderItems) && body.orderItems.length > 0) {
-      // Ensure createdOrder has an id - extract it properly
-      const orderId = String(createdOrder.get ? createdOrder.get('id') : (createdOrder as any).dataValues?.id || createdOrder.id);
-      
-      if (!orderId || orderId === 'undefined' || orderId === 'null') {
-        console.error('[ERROR] Created Order has no valid id, cannot create OrderItems', {
-          orderId,
-          createdOrderId: createdOrder.id,
-          createdOrderDataValues: (createdOrder as any).dataValues
-        });
-        throw new Error('Order was created but id is missing or invalid');
-      }
-
-      console.log(`[DEBUG] Creating OrderItems for order ${orderId}`, {
-        orderItemsCount: body.orderItems.length,
-        orderItems: body.orderItems.map(item => ({
-          itemType: item.itemType,
-          itemId: item.itemId,
-          itemName: item.itemName,
-          quantity: item.quantity
-        }))
-      });
-      
-      // Check if orderItems already exist for this order (idempotency)
-      const existingOrderItems = await OrderItem.findAll({
-        where: { orderId }
-      });
-
-      console.log(`[DEBUG] Existing OrderItems check for order ${orderId}:`, {
-        existingCount: existingOrderItems.length
-      });
-
-      // Only create orderItems if they don't already exist
-      if (existingOrderItems.length === 0) {
-        try {
-          // Create all orderItems using individual create() calls (bulkCreate has issues with UUIDs in PostgreSQL)
-          // This matches the pattern used in orderItem.handler.ts
-          console.log(`[DEBUG] Attempting to create ${body.orderItems.length} OrderItems for order ${orderId}`);
-          
-          createdOrderItems = await Promise.all(
-            body.orderItems.map(async (item) => {
-              // Validate required fields
-              if (!item.itemType) {
-                throw new Error(`OrderItem missing required field 'itemType': ${JSON.stringify(item)}`);
-              }
-
-              // Use individual create() call with id: randomUUID() - same pattern as orderItem.handler.ts
-              return await OrderItem.create({
-                // Some environments don't end up with a DB-side UUID default; generate it here to avoid NULL id inserts.
-                id: randomUUID(),
-                orderId: orderId, // Explicitly use the string-converted orderId
-                itemType: item.itemType,
-                itemId: item.itemId || null,
-                itemName: item.itemName || null,
-                itemDescription: item.itemDescription || null,
-                itemImageUrl: item.itemImageUrl || null,
-                productId: item.productId || null,
-                pujaId: item.pujaId || null,
-                prasadId: item.prasadId || null,
-                dharshanId: item.dharshanId || null,
-                quantity: item.quantity || null,
-                unitPrice: item.unitPrice ? String(item.unitPrice) : null,
-                totalPrice: item.totalPrice ? String(item.totalPrice) : null,
-                itemDetails: item.itemDetails || null,
-                status: item.status || null
-              } as any);
-            })
-          );
-          
-          console.log(`[SUCCESS] Created ${createdOrderItems.length} orderItems for order ${orderId}`);
-        } catch (orderItemError) {
-          const error = orderItemError as Error;
-          console.error('[ERROR] Failed to create orderItems:', {
-            error: error.message,
-            stack: error.stack,
-            orderId,
-            orderItemsCount: body.orderItems.length,
-            orderItems: body.orderItems,
-            errorName: error.name
-          });
-          reportError(orderItemError);
-          // Log error but don't fail the payment verification
-          // The order is already created, so we continue
-        }
-      } else {
-        console.log(`[INFO] OrderItems already exist for order ${orderId}, skipping creation. Using existing ${existingOrderItems.length} items.`);
-        createdOrderItems = existingOrderItems;
-      }
-    } else {
-      // Log why orderItems are not being created
-      if (!createdOrder) {
-        console.log('[INFO] OrderItems not created: createdOrder is null/undefined');
-      } else if (!body.orderItems) {
-        console.log('[INFO] OrderItems not created: body.orderItems is missing');
-      } else if (!Array.isArray(body.orderItems)) {
-        console.log('[INFO] OrderItems not created: body.orderItems is not an array', {
-          type: typeof body.orderItems,
-          value: body.orderItems
-        });
-      } else if (body.orderItems.length === 0) {
-        console.log('[INFO] OrderItems not created: body.orderItems array is empty');
-      }
-    }
-
-    // Create initial OrderStatusHistory if order exists and status history doesn't exist
-    let createdStatusHistory: OrderStatusHistory | null = null;
-    if (createdOrder) {
-      // Check if status history already exists for this order (idempotency)
-      const existingStatusHistory = await OrderStatusHistory.findOne({
-        where: { orderId: createdOrder.id }
-      });
-
-      if (!existingStatusHistory) {
-        try {
-          const initialStatus = (body.status as any) ?? 'pending';
-          createdStatusHistory = await OrderStatusHistory.create({
-            id: randomUUID(),
-            orderId: createdOrder.id,
-            status: initialStatus,
-            previousStatus: null,
-            notes: 'Order created via payment verification',
-            location: null
-          } as any);
-          console.log(`Created initial order status history for order ${createdOrder.id} with status: ${initialStatus}`);
-        } catch (statusHistoryError) {
-          console.error('Error creating order status history:', statusHistoryError);
-          // Log error but don't fail the payment verification
-          // The order is already created, so we continue
-        }
-      } else {
-        console.log(`Order status history already exists for order ${createdOrder.id}, skipping creation`);
-        createdStatusHistory = existingStatusHistory;
-      }
-    }
-
-    console.log(`Payment verified successfully for order ${body.razorpay_order_id}`);
+    console.log(`Payment verified successfully for order ${body.razorpay_order_id}. Order will be created via webhook.`);
     res.status(200).json({
-      message: 'Payment verified successfully',
+      message: 'Payment verified successfully. Order will be created via webhook.',
       order,
-      appOrderId: ((order.metadata as any)?.appOrderId as string | undefined),
-      orderItems: createdOrderItems.length > 0 ? createdOrderItems : undefined,
-      orderStatusHistory: createdStatusHistory ? [createdStatusHistory] : undefined
+      status: 'verified'
     });
   } catch (error) {
     const err = error as Error;
@@ -789,6 +437,309 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     });
   }
 };
+
+/**
+ * Reusable function to create Order, OrderItems, OrderStatusHistory, and RudrakshaBooking
+ * from PaymentOrder metadata. Used by webhook handlers.
+ * 
+ * @param paymentOrder - The PaymentOrder record
+ * @param orderData - Order creation data (from PaymentOrder.metadata.orderData)
+ * @param accessToken - Optional access token for RudrakshaBooking creation
+ * @returns Created or existing Order, or null if creation failed
+ */
+async function createOrderFromPaymentOrderData(
+  paymentOrder: PaymentOrder,
+  orderData: any,
+  accessToken?: string
+): Promise<Order | null> {
+  try {
+    // Validate required fields
+    if (!orderData.userId) {
+      console.error('[WEBHOOK] userId is required but missing in orderData');
+      return null;
+    }
+
+    if (!orderData.orderType) {
+      console.error('[WEBHOOK] orderType is required but missing in orderData');
+      return null;
+    }
+
+    // Check idempotency - if Order already exists, return it
+    const metadata = (paymentOrder.metadata as Record<string, unknown> | undefined) ?? {};
+    const existingAppOrderId = (metadata as any).appOrderId as string | undefined;
+
+    if (existingAppOrderId) {
+      console.log(`[WEBHOOK] Order already exists with id ${existingAppOrderId}, skipping creation`);
+      const existingOrder = await Order.findByPk(existingAppOrderId);
+      return existingOrder;
+    }
+
+    // Check for duplicate Rudraksha booking if orderType is 'event' and booking data is provided
+    if (orderData.orderType === 'event' && orderData.rudrakshaBookingData) {
+      const bookingData = orderData.rudrakshaBookingData;
+      if (bookingData.preferredDate && bookingData.preferredTimeSlot) {
+        try {
+          const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
+          if (appcontrolUrl) {
+            // Fetch existing bookings for this user
+            const bookingsUrl = `${appcontrolUrl}/launch-event/rudraksha-bookings?userId=${encodeURIComponent(bookingData.userId)}`;
+            const bookingsRes: any = await request({
+              method: 'GET',
+              url: bookingsUrl,
+              headers: {
+                ...(accessToken ? { 'Authorization': accessToken.startsWith('Bearer ') ? accessToken : `Bearer ${accessToken}` } : {}),
+                'Content-Type': 'application/json'
+              },
+              timeout: 10000
+            });
+
+            // Check if any existing booking matches the same date and time slot
+            if (bookingsRes?.data?.success && bookingsRes?.data?.data?.bookings) {
+              const existingBookings = Array.isArray(bookingsRes.data.data.bookings) 
+                ? bookingsRes.data.data.bookings 
+                : [];
+              
+              // Normalize the preferredDate format (remove time if present)
+              const normalizedPreferredDate = bookingData.preferredDate?.includes('T')
+                ? bookingData.preferredDate.split('T')[0]
+                : bookingData.preferredDate;
+
+              if (normalizedPreferredDate && bookingData.preferredTimeSlot) {
+                const duplicateBooking = existingBookings.find((booking: any) => {
+                  // Handle new object format
+                  if (booking.preferredTimeSlot && typeof booking.preferredTimeSlot === 'object' && !Array.isArray(booking.preferredTimeSlot)) {
+                    const timeSlots = booking.preferredTimeSlot[normalizedPreferredDate];
+                    if (timeSlots) {
+                      const slotArray = Array.isArray(timeSlots) ? timeSlots : [timeSlots];
+                      return slotArray.includes(bookingData.preferredTimeSlot);
+                    }
+                    return false;
+                  } else if (Array.isArray(booking.preferredDate) && Array.isArray(booking.preferredTimeSlot)) {
+                    const existingDates = booking.preferredDate;
+                    const existingTimeSlots = booking.preferredTimeSlot;
+                    for (let i = 0; i < existingDates.length; i++) {
+                      const existingDate = existingDates[i]?.includes('T')
+                        ? existingDates[i].split('T')[0]
+                        : existingDates[i];
+                      if (existingDate === normalizedPreferredDate && existingTimeSlots[i] === bookingData.preferredTimeSlot) {
+                        return true;
+                      }
+                    }
+                    return false;
+                  } else {
+                    const existingDate = booking.preferredDate 
+                      ? (typeof booking.preferredDate === 'string' && booking.preferredDate.includes('T') 
+                          ? booking.preferredDate.split('T')[0] 
+                          : booking.preferredDate)
+                      : null;
+                    return (
+                      existingDate === normalizedPreferredDate &&
+                      booking.preferredTimeSlot === bookingData.preferredTimeSlot
+                    );
+                  }
+                });
+
+                if (duplicateBooking) {
+                  console.warn(`[WEBHOOK] [DUPLICATE_BOOKING] User ${bookingData.userId} already has a booking for date ${normalizedPreferredDate} and time slot ${bookingData.preferredTimeSlot}`);
+                  // For webhook, we don't throw - just log and return null
+                  return null;
+                }
+              }
+            }
+          }
+        } catch (duplicateCheckError) {
+          // Log error but don't fail - best-effort validation
+          console.error('[WEBHOOK] [ERROR] Failed to check for duplicate booking:', duplicateCheckError);
+          reportError(duplicateCheckError);
+        }
+      }
+    }
+
+    // Create Order
+    let createdOrder: Order | null = null;
+    try {
+      // Prepare order data with all required fields
+      const orderDataToCreate: any = {
+        orderNumber: randomUUID(),
+        userId: orderData.userId,
+        orderType: orderData.orderType,
+        status: orderData.status ?? 'pending',
+        paymentStatus: 'paid',
+        paymentMethod: 'razorpay',
+        paidAt: new Date()
+      };
+
+      // Add optional fields only if they exist
+      if (orderData.templeId) orderDataToCreate.templeId = orderData.templeId;
+      if (orderData.addressId) orderDataToCreate.addressId = orderData.addressId;
+      if (orderData.scheduledDate) orderDataToCreate.scheduledDate = orderData.scheduledDate;
+      if (orderData.scheduledTimestamp) orderDataToCreate.scheduledTimestamp = orderData.scheduledTimestamp;
+      if (orderData.fulfillmentType) orderDataToCreate.fulfillmentType = orderData.fulfillmentType;
+      if (orderData.subtotal !== undefined) orderDataToCreate.subtotal = String(orderData.subtotal);
+      if (orderData.discountAmount !== undefined) orderDataToCreate.discountAmount = String(orderData.discountAmount);
+      if (orderData.convenienceFee !== undefined) orderDataToCreate.convenienceFee = String(orderData.convenienceFee);
+      if (orderData.taxAmount !== undefined) orderDataToCreate.taxAmount = String(orderData.taxAmount);
+      if (orderData.totalAmount !== undefined) orderDataToCreate.totalAmount = String(orderData.totalAmount);
+      if (orderData.currency) orderDataToCreate.currency = orderData.currency;
+      else if (paymentOrder.currency) orderDataToCreate.currency = paymentOrder.currency;
+      if (orderData.contactName) orderDataToCreate.contactName = orderData.contactName;
+      if (orderData.contactPhone) orderDataToCreate.contactPhone = orderData.contactPhone;
+      if (orderData.contactEmail) orderDataToCreate.contactEmail = orderData.contactEmail;
+      else if (paymentOrder.customerEmail) orderDataToCreate.contactEmail = paymentOrder.customerEmail;
+      if (orderData.shippingAddress) orderDataToCreate.shippingAddress = orderData.shippingAddress;
+      if (orderData.deliveryType) orderDataToCreate.deliveryType = orderData.deliveryType;
+
+      // Explicitly set id (UUID generation)
+      const orderId = randomUUID();
+      orderDataToCreate.id = orderId;
+
+      createdOrder = await Order.create(orderDataToCreate);
+      
+      // Verify order was created
+      if (!createdOrder) {
+        throw new Error('Order creation returned null/undefined');
+      }
+      
+      // Ensure id is accessible
+      if (!createdOrder.id) {
+        (createdOrder as any).id = orderId;
+        console.warn('[WEBHOOK] [WARN] Order.id was not set by Sequelize, using generated id');
+      }
+
+      // Update PaymentOrder metadata with appOrderId
+      await paymentOrder.update({
+        metadata: {
+          ...metadata,
+          appOrderId: createdOrder.id
+        }
+      } as any);
+
+      console.log(`[WEBHOOK] [SUCCESS] Created Order ${createdOrder.id} for PaymentOrder ${paymentOrder.razorpayOrderId}`);
+    } catch (orderCreateError) {
+      const error = orderCreateError as Error;
+      console.error('[WEBHOOK] [ERROR] Failed to create Order:', error.message);
+      reportError(orderCreateError);
+      return null;
+    }
+
+    // Create OrderItems if provided
+    if (createdOrder && orderData.orderItems && Array.isArray(orderData.orderItems) && orderData.orderItems.length > 0) {
+      const orderId = String(createdOrder.get ? createdOrder.get('id') : (createdOrder as any).dataValues?.id || createdOrder.id);
+      
+      if (orderId && orderId !== 'undefined' && orderId !== 'null') {
+        // Check if orderItems already exist (idempotency)
+        const existingOrderItems = await OrderItem.findAll({
+          where: { orderId }
+        });
+
+        if (existingOrderItems.length === 0) {
+          try {
+            console.log(`[WEBHOOK] Creating ${orderData.orderItems.length} OrderItems for order ${orderId}`);
+            
+            await Promise.all(
+              orderData.orderItems.map(async (item: any) => {
+                if (!item.itemType) {
+                  throw new Error(`OrderItem missing required field 'itemType': ${JSON.stringify(item)}`);
+                }
+
+                return await OrderItem.create({
+                  id: randomUUID(),
+                  orderId: orderId,
+                  itemType: item.itemType,
+                  itemId: item.itemId || null,
+                  itemName: item.itemName || null,
+                  itemDescription: item.itemDescription || null,
+                  itemImageUrl: item.itemImageUrl || null,
+                  productId: item.productId || null,
+                  pujaId: item.pujaId || null,
+                  prasadId: item.prasadId || null,
+                  dharshanId: item.dharshanId || null,
+                  quantity: item.quantity || null,
+                  unitPrice: item.unitPrice ? String(item.unitPrice) : null,
+                  totalPrice: item.totalPrice ? String(item.totalPrice) : null,
+                  itemDetails: item.itemDetails || null,
+                  status: item.status || null
+                } as any);
+              })
+            );
+            
+            console.log(`[WEBHOOK] [SUCCESS] Created OrderItems for order ${orderId}`);
+          } catch (orderItemError) {
+            console.error('[WEBHOOK] [ERROR] Failed to create orderItems:', orderItemError);
+            reportError(orderItemError);
+            // Don't fail - order is already created
+          }
+        } else {
+          console.log(`[WEBHOOK] OrderItems already exist for order ${orderId}, skipping creation`);
+        }
+      }
+    }
+
+    // Create OrderStatusHistory
+    if (createdOrder) {
+      const existingStatusHistory = await OrderStatusHistory.findOne({
+        where: { orderId: createdOrder.id }
+      });
+
+      if (!existingStatusHistory) {
+        try {
+          const initialStatus = orderData.status ?? 'pending';
+          await OrderStatusHistory.create({
+            id: randomUUID(),
+            orderId: createdOrder.id,
+            status: initialStatus,
+            previousStatus: null,
+            notes: 'Order created via Razorpay webhook',
+            location: null
+          } as any);
+          console.log(`[WEBHOOK] Created initial order status history for order ${createdOrder.id}`);
+        } catch (statusHistoryError) {
+          console.error('[WEBHOOK] [ERROR] Failed to create order status history:', statusHistoryError);
+          reportError(statusHistoryError);
+          // Don't fail - order is already created
+        }
+      }
+    }
+
+    // Create RudrakshaBooking if orderType is "event"
+    if (createdOrder && orderData.orderType === 'event' && orderData.rudrakshaBookingData && createdOrder.id) {
+      try {
+        const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
+        if (appcontrolUrl) {
+          const bookingPayload = {
+            ...orderData.rudrakshaBookingData,
+            orderId: createdOrder.id
+          };
+
+          await request({
+            method: 'POST',
+            url: `${appcontrolUrl}/launch-event/rudraksha-booking`,
+            headers: {
+              'Content-Type': 'application/json',
+              ...(accessToken ? { Authorization: accessToken.startsWith('Bearer ') ? accessToken : `Bearer ${accessToken}` } : {})
+            },
+            data: bookingPayload,
+            timeout: 10000
+          });
+
+          console.log(`[WEBHOOK] [SUCCESS] Created RudrakshaBooking for Order ${createdOrder.id}`);
+        } else {
+          console.warn('[WEBHOOK] [WARN] APPCONTROL_SERVICE_URL not configured; skipping RudrakshaBooking creation');
+        }
+      } catch (bookingError) {
+        // Best-effort: log error but don't fail
+        console.error('[WEBHOOK] [ERROR] Failed to create RudrakshaBooking:', bookingError);
+        reportError(bookingError);
+      }
+    }
+
+    return createdOrder;
+  } catch (error) {
+    console.error('[WEBHOOK] [ERROR] createOrderFromPaymentOrderData failed:', error);
+    reportError(error);
+    return null;
+  }
+}
 
 export const capturePaymentHandler: EndpointHandler<
   EndpointAuthType.JWT
@@ -931,9 +882,30 @@ async function handlePaymentCaptured(paymentEntity: RazorpayPaymentEntity): Prom
       }
     });
 
-    console.log(`Payment ${paymentEntity.id} captured for order ${paymentEntity.order_id}`);
+    console.log(`[WEBHOOK] Payment ${paymentEntity.id} captured for order ${paymentEntity.order_id}`);
+
+    // Check if order data exists in metadata and create order if not already created
+    const updatedMetadata = (order.metadata as any) || {};
+    const orderData = updatedMetadata.orderData;
+    const existingAppOrderId = updatedMetadata.appOrderId;
+
+    if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
+      try {
+        console.log(`[WEBHOOK] Creating Order from webhook for payment ${paymentEntity.id}`);
+        await createOrderFromPaymentOrderData(order, orderData, undefined);
+        console.log(`[WEBHOOK] Successfully created Order from webhook for payment ${paymentEntity.id}`);
+      } catch (orderCreateError) {
+        // Log but don't fail webhook - best effort
+        console.error('[WEBHOOK] Failed to create order from webhook:', orderCreateError);
+        reportError(orderCreateError);
+      }
+    } else if (existingAppOrderId) {
+      console.log(`[WEBHOOK] Order already exists (${existingAppOrderId}), skipping creation`);
+    } else {
+      console.log('[WEBHOOK] Order data not found in metadata, skipping order creation');
+    }
   } catch (error) {
-    console.error('Error handling payment captured event:', error);
+    console.error('[WEBHOOK] Error handling payment captured event:', error);
     throw new Error(WEBHOOK_PAYMENT_UPDATE_FAILED);
   }
 }
@@ -990,9 +962,30 @@ async function handleOrderPaid(orderEntity: RazorpayOrderEntity): Promise<void> 
       });
     }
 
-    console.log(`Order ${orderEntity.id} marked as paid`);
+    console.log(`[WEBHOOK] Order ${orderEntity.id} marked as paid`);
+
+    // Check if order data exists in metadata and create order if not already created
+    const updatedMetadata = (order.metadata as any) || {};
+    const orderData = updatedMetadata.orderData;
+    const existingAppOrderId = updatedMetadata.appOrderId;
+
+    if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
+      try {
+        console.log(`[WEBHOOK] Creating Order from webhook for Razorpay order ${orderEntity.id}`);
+        await createOrderFromPaymentOrderData(order, orderData, undefined);
+        console.log(`[WEBHOOK] Successfully created Order from webhook for Razorpay order ${orderEntity.id}`);
+      } catch (orderCreateError) {
+        // Log but don't fail webhook - best effort
+        console.error('[WEBHOOK] Failed to create order from webhook:', orderCreateError);
+        reportError(orderCreateError);
+      }
+    } else if (existingAppOrderId) {
+      console.log(`[WEBHOOK] Order already exists (${existingAppOrderId}), skipping creation`);
+    } else {
+      console.log('[WEBHOOK] Order data not found in metadata, skipping order creation');
+    }
   } catch (error) {
-    console.error('Error handling order paid event:', error);
+    console.error('[WEBHOOK] Error handling order paid event:', error);
     throw new Error(WEBHOOK_PAYMENT_UPDATE_FAILED);
   }
 }
