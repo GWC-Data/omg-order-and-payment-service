@@ -412,53 +412,43 @@ export const getOrdersByUserIdHandler: EndpointHandler<EndpointAuthType.JWT> = a
       offset,
       order: [['createdAt', 'DESC']]
     });
-
-    // Fetch OrderItems and OrderStatusHistory for all orders in batch
-    const orderIds = orders.map(order => order.id);
-    const [allItems, allStatusHistory] = await Promise.all([
-      orderIds.length > 0
-        ? OrderItem.findAll({
-            where: { orderId: { [Op.in]: orderIds } },
+    // Fetch OrderItems and OrderStatusHistory for each order (same approach as getOrderByIdHandler)
+    const ordersWithDetails = await Promise.all(
+      orders.map(async (order) => {
+        const orderId = String(order.get ? order.get('id') : (order as any).dataValues?.id || order.id);
+        
+        // Fetch OrderItems and OrderStatusHistory for this order
+        const [items, statusHistory] = await Promise.all([
+          OrderItem.findAll({
+            where: { orderId },
             order: [['createdAt', 'ASC']]
-          })
-        : Promise.resolve([]),
-      orderIds.length > 0
-        ? OrderStatusHistory.findAll({
-            where: { orderId: { [Op.in]: orderIds } },
+          }),
+          OrderStatusHistory.findAll({
+            where: { orderId },
             order: [['createdAt', 'DESC']]
           })
-        : Promise.resolve([])
-    ]);
+        ]);
 
-    // Group items and status history by orderId
-    const itemsByOrderId: Record<string, any[]> = {};
-    const statusHistoryByOrderId: Record<string, any[]> = {};
+        // Combine OrderItems and OrderStatusHistory into a single array with type key
+        // const orderDetails = [
+        //   ...items.map(item => ({
+        //     type: 'orderItem',
+        //     ...item.toJSON ? item.toJSON() : item
+        //   })),
+        //   ...statusHistory.map(history => ({
+        //     type: 'orderStatusHistory',
+        //     ...history.toJSON ? history.toJSON() : history
+        //   }))
+        // ];
 
-    for (const item of allItems) {
-      const orderId = String((item as any).orderId);
-      if (!itemsByOrderId[orderId]) {
-        itemsByOrderId[orderId] = [];
-      }
-      itemsByOrderId[orderId].push(item);
-    }
-
-    for (const history of allStatusHistory) {
-      const orderId = String((history as any).orderId);
-      if (!statusHistoryByOrderId[orderId]) {
-        statusHistoryByOrderId[orderId] = [];
-      }
-      statusHistoryByOrderId[orderId].push(history);
-    }
-
-    // Attach items and status history to each order
-    const ordersWithDetails = orders.map(order => {
-      const orderId = String(order.id);
-      return {
-        ...order.toJSON(),
-        orderItems: itemsByOrderId[orderId] || [],
-        orderStatusHistory: statusHistoryByOrderId[orderId] || []
-      };
-    });
+        return {
+          ...order.toJSON(),
+          orderItems: items,
+          orderStatusHistory: statusHistory,
+          // orderDetails: orderDetails
+        };
+      })
+    );
 
     sendSuccessResponse(res, 200, ORDER_LIST_SUCCESS, {
       orders: ordersWithDetails,
