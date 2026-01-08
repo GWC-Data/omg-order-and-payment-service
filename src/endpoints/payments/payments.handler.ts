@@ -554,53 +554,117 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
 
     // Create OrderItems if provided and order exists
     let createdOrderItems: OrderItem[] = [];
+    
+    // Log orderItems creation attempt status
+    console.log('[DEBUG] OrderItems creation check:', {
+      hasCreatedOrder: !!createdOrder,
+      hasOrderItems: !!body.orderItems,
+      isOrderItemsArray: Array.isArray(body.orderItems),
+      orderItemsLength: body.orderItems?.length || 0,
+      orderId: createdOrder?.id || 'N/A'
+    });
+
     if (createdOrder && body.orderItems && Array.isArray(body.orderItems) && body.orderItems.length > 0) {
-      // Ensure createdOrder has an id
-      if (!createdOrder.id) {
-        console.error('[ERROR] Created Order has no id, cannot create OrderItems');
-        throw new Error('Order was created but id is missing');
+      // Ensure createdOrder has an id - extract it properly
+      const orderId = String(createdOrder.get ? createdOrder.get('id') : (createdOrder as any).dataValues?.id || createdOrder.id);
+      
+      if (!orderId || orderId === 'undefined' || orderId === 'null') {
+        console.error('[ERROR] Created Order has no valid id, cannot create OrderItems', {
+          orderId,
+          createdOrderId: createdOrder.id,
+          createdOrderDataValues: (createdOrder as any).dataValues
+        });
+        throw new Error('Order was created but id is missing or invalid');
       }
 
-      console.log(`[DEBUG] Creating OrderItems for order ${createdOrder.id}`);
+      console.log(`[DEBUG] Creating OrderItems for order ${orderId}`, {
+        orderItemsCount: body.orderItems.length,
+        orderItems: body.orderItems.map(item => ({
+          itemType: item.itemType,
+          itemId: item.itemId,
+          itemName: item.itemName,
+          quantity: item.quantity
+        }))
+      });
       
       // Check if orderItems already exist for this order (idempotency)
       const existingOrderItems = await OrderItem.findAll({
-        where: { orderId: createdOrder.id }
+        where: { orderId }
+      });
+
+      console.log(`[DEBUG] Existing OrderItems check for order ${orderId}:`, {
+        existingCount: existingOrderItems.length
       });
 
       // Only create orderItems if they don't already exist
       if (existingOrderItems.length === 0) {
         try {
-          // Create all orderItems
-          const orderItemsToCreate = body.orderItems.map((item) => ({
-            id: randomUUID(),
-            orderId: createdOrder!.id,
-            itemType: item.itemType,
-            itemId: item.itemId,
-            itemName: item.itemName,
-            itemDescription: item.itemDescription,
-            itemImageUrl: item.itemImageUrl,
-            productId: item.productId,
-            pujaId: item.pujaId,
-            prasadId: item.prasadId,
-            dharshanId: item.dharshanId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
-            itemDetails: item.itemDetails,
-            status: item.status
-          }));
+          // Create all orderItems using individual create() calls (bulkCreate has issues with UUIDs in PostgreSQL)
+          // This matches the pattern used in orderItem.handler.ts
+          console.log(`[DEBUG] Attempting to create ${body.orderItems.length} OrderItems for order ${orderId}`);
+          
+          createdOrderItems = await Promise.all(
+            body.orderItems.map(async (item) => {
+              // Validate required fields
+              if (!item.itemType) {
+                throw new Error(`OrderItem missing required field 'itemType': ${JSON.stringify(item)}`);
+              }
 
-          createdOrderItems = await OrderItem.bulkCreate(orderItemsToCreate as any);
-          console.log(`Created ${createdOrderItems.length} orderItems for order ${createdOrder.id}`);
+              // Use individual create() call with id: randomUUID() - same pattern as orderItem.handler.ts
+              return await OrderItem.create({
+                // Some environments don't end up with a DB-side UUID default; generate it here to avoid NULL id inserts.
+                id: randomUUID(),
+                orderId: orderId, // Explicitly use the string-converted orderId
+                itemType: item.itemType,
+                itemId: item.itemId || null,
+                itemName: item.itemName || null,
+                itemDescription: item.itemDescription || null,
+                itemImageUrl: item.itemImageUrl || null,
+                productId: item.productId || null,
+                pujaId: item.pujaId || null,
+                prasadId: item.prasadId || null,
+                dharshanId: item.dharshanId || null,
+                quantity: item.quantity || null,
+                unitPrice: item.unitPrice ? String(item.unitPrice) : null,
+                totalPrice: item.totalPrice ? String(item.totalPrice) : null,
+                itemDetails: item.itemDetails || null,
+                status: item.status || null
+              } as any);
+            })
+          );
+          
+          console.log(`[SUCCESS] Created ${createdOrderItems.length} orderItems for order ${orderId}`);
         } catch (orderItemError) {
-          console.error('Error creating orderItems:', orderItemError);
+          const error = orderItemError as Error;
+          console.error('[ERROR] Failed to create orderItems:', {
+            error: error.message,
+            stack: error.stack,
+            orderId,
+            orderItemsCount: body.orderItems.length,
+            orderItems: body.orderItems,
+            errorName: error.name
+          });
+          reportError(orderItemError);
           // Log error but don't fail the payment verification
           // The order is already created, so we continue
         }
       } else {
-        console.log(`OrderItems already exist for order ${createdOrder.id}, skipping creation`);
+        console.log(`[INFO] OrderItems already exist for order ${orderId}, skipping creation. Using existing ${existingOrderItems.length} items.`);
         createdOrderItems = existingOrderItems;
+      }
+    } else {
+      // Log why orderItems are not being created
+      if (!createdOrder) {
+        console.log('[INFO] OrderItems not created: createdOrder is null/undefined');
+      } else if (!body.orderItems) {
+        console.log('[INFO] OrderItems not created: body.orderItems is missing');
+      } else if (!Array.isArray(body.orderItems)) {
+        console.log('[INFO] OrderItems not created: body.orderItems is not an array', {
+          type: typeof body.orderItems,
+          value: body.orderItems
+        });
+      } else if (body.orderItems.length === 0) {
+        console.log('[INFO] OrderItems not created: body.orderItems array is empty');
       }
     }
 
