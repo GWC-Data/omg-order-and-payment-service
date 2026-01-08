@@ -370,27 +370,59 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
                 : [];
               
               // Normalize the preferredDate format (remove time if present)
-              const normalizedPreferredDate = bookingData.preferredDate.includes('T')
+              const normalizedPreferredDate = bookingData.preferredDate?.includes('T')
                 ? bookingData.preferredDate.split('T')[0]
                 : bookingData.preferredDate;
 
-              const duplicateBooking = existingBookings.find((booking: any) => {
-                const existingDate = booking.preferredDate 
-                  ? (booking.preferredDate.includes('T') ? booking.preferredDate.split('T')[0] : booking.preferredDate)
-                  : null;
-                return (
-                  existingDate === normalizedPreferredDate &&
-                  booking.preferredTimeSlot === bookingData.preferredTimeSlot
-                );
-              });
-
-              if (duplicateBooking) {
-                console.warn(`[DUPLICATE_BOOKING] User ${bookingData.userId} already has a booking for date ${normalizedPreferredDate} and time slot ${bookingData.preferredTimeSlot}`);
-                res.status(400).json({
-                  message: DUPLICATE_RUDRAKSHA_BOOKING_ERROR,
-                  error: 'DUPLICATE_BOOKING_ERROR'
+              if (!normalizedPreferredDate || !bookingData.preferredTimeSlot) {
+                // Skip duplicate check if date or time slot is missing
+                console.warn('[DUPLICATE_BOOKING] Skipping duplicate check: preferredDate or preferredTimeSlot missing');
+              } else {
+                const duplicateBooking = existingBookings.find((booking: any) => {
+                  // Handle new object format
+                  if (booking.preferredTimeSlot && typeof booking.preferredTimeSlot === 'object' && !Array.isArray(booking.preferredTimeSlot)) {
+                    // New format: object with date keys
+                    const timeSlots = booking.preferredTimeSlot[normalizedPreferredDate];
+                    if (timeSlots) {
+                      const slotArray = Array.isArray(timeSlots) ? timeSlots : [timeSlots];
+                      return slotArray.includes(bookingData.preferredTimeSlot);
+                    }
+                    return false;
+                  } else if (Array.isArray(booking.preferredDate) && Array.isArray(booking.preferredTimeSlot)) {
+                    // Old format: arrays (backward compatibility)
+                    const existingDates = booking.preferredDate;
+                    const existingTimeSlots = booking.preferredTimeSlot;
+                    for (let i = 0; i < existingDates.length; i++) {
+                      const existingDate = existingDates[i]?.includes('T')
+                        ? existingDates[i].split('T')[0]
+                        : existingDates[i];
+                      if (existingDate === normalizedPreferredDate && existingTimeSlots[i] === bookingData.preferredTimeSlot) {
+                        return true;
+                      }
+                    }
+                    return false;
+                  } else {
+                    // Legacy single value format
+                    const existingDate = booking.preferredDate 
+                      ? (typeof booking.preferredDate === 'string' && booking.preferredDate.includes('T') 
+                          ? booking.preferredDate.split('T')[0] 
+                          : booking.preferredDate)
+                      : null;
+                    return (
+                      existingDate === normalizedPreferredDate &&
+                      booking.preferredTimeSlot === bookingData.preferredTimeSlot
+                    );
+                  }
                 });
-                return;
+
+                if (duplicateBooking) {
+                  console.warn(`[DUPLICATE_BOOKING] User ${bookingData.userId} already has a booking for date ${normalizedPreferredDate} and time slot ${bookingData.preferredTimeSlot}`);
+                  res.status(400).json({
+                    message: DUPLICATE_RUDRAKSHA_BOOKING_ERROR,
+                    error: 'DUPLICATE_BOOKING_ERROR'
+                  });
+                  return;
+                }
               }
             }
           } else {
