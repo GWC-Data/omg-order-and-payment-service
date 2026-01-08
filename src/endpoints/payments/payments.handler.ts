@@ -34,7 +34,8 @@ import {
   RAZORPAY_EVENT_PAYMENT_FAILED,
   RAZORPAY_EVENT_ORDER_PAID,
   RAZORPAY_EVENT_REFUND_CREATED,
-  RAZORPAY_EVENT_REFUND_PROCESSED
+  RAZORPAY_EVENT_REFUND_PROCESSED,
+  DUPLICATE_RUDRAKSHA_BOOKING_ERROR
 } from './payments.const';
 import {
   CapturePaymentBody,
@@ -339,6 +340,69 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
         error: 'orderType is missing from request body'
       });
       return;
+    }
+
+    // Check for duplicate Rudraksha booking if orderType is 'event' and booking data is provided
+    if (body.orderType === 'event' && body.rudrakshaBookingData) {
+      const bookingData = body.rudrakshaBookingData;
+      if (bookingData.preferredDate && bookingData.preferredTimeSlot) {
+        try {
+          const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
+          if (appcontrolUrl) {
+            const accessToken = req.headers.authorization;
+            
+            // Fetch existing bookings for this user
+            const bookingsUrl = `${appcontrolUrl}/launch-event/rudraksha-bookings?userId=${encodeURIComponent(bookingData.userId)}`;
+            const bookingsRes: any = await request({
+              method: 'GET',
+              url: bookingsUrl,
+              headers: {
+                ...(accessToken ? { 'Authorization': accessToken.startsWith('Bearer ') ? accessToken : `Bearer ${accessToken}` } : {}),
+                'Content-Type': 'application/json'
+              },
+              timeout: 10000
+            });
+
+            // Check if any existing booking matches the same date and time slot
+            if (bookingsRes?.data?.success && bookingsRes?.data?.data?.bookings) {
+              const existingBookings = Array.isArray(bookingsRes.data.data.bookings) 
+                ? bookingsRes.data.data.bookings 
+                : [];
+              
+              // Normalize the preferredDate format (remove time if present)
+              const normalizedPreferredDate = bookingData.preferredDate.includes('T')
+                ? bookingData.preferredDate.split('T')[0]
+                : bookingData.preferredDate;
+
+              const duplicateBooking = existingBookings.find((booking: any) => {
+                const existingDate = booking.preferredDate 
+                  ? (booking.preferredDate.includes('T') ? booking.preferredDate.split('T')[0] : booking.preferredDate)
+                  : null;
+                return (
+                  existingDate === normalizedPreferredDate &&
+                  booking.preferredTimeSlot === bookingData.preferredTimeSlot
+                );
+              });
+
+              if (duplicateBooking) {
+                console.warn(`[DUPLICATE_BOOKING] User ${bookingData.userId} already has a booking for date ${normalizedPreferredDate} and time slot ${bookingData.preferredTimeSlot}`);
+                res.status(400).json({
+                  message: DUPLICATE_RUDRAKSHA_BOOKING_ERROR,
+                  error: 'DUPLICATE_BOOKING_ERROR'
+                });
+                return;
+              }
+            }
+          } else {
+            console.warn('[WARN] APPCONTROL_SERVICE_URL not configured; skipping duplicate booking check');
+          }
+        } catch (duplicateCheckError) {
+          // Log error but don't fail payment verification - best-effort validation
+          console.error('[ERROR] Failed to check for duplicate booking:', duplicateCheckError);
+          reportError(duplicateCheckError);
+          // Continue with order creation even if duplicate check fails
+        }
+      }
     }
 
     // Create app Order (idempotent using PaymentOrder.metadata.appOrderId)

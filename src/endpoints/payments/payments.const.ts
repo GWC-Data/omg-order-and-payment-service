@@ -25,5 +25,6 @@ export const RAZORPAY_EVENT_PAYMENT_FAILED = 'payment.failed';
 export const RAZORPAY_EVENT_ORDER_PAID = 'order.paid';
 export const RAZORPAY_EVENT_REFUND_CREATED = 'refund.created';
 export const RAZORPAY_EVENT_REFUND_PROCESSED = 'refund.processed';
+export const DUPLICATE_RUDRAKSHA_BOOKING_ERROR = 'User already has a booking for this date and time slot.';
 
 
