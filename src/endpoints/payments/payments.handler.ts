@@ -569,6 +569,11 @@ async function createOrderFromPaymentOrderData(
         paidAt: new Date()
       };
 
+      // Add payment ID from PaymentOrder
+      if (paymentOrder.id) {
+        orderDataToCreate.paymentId = paymentOrder.id;
+      }
+
       // Add optional fields only if they exist
       if (orderData.templeId) orderDataToCreate.templeId = orderData.templeId;
       if (orderData.addressId) orderDataToCreate.addressId = orderData.addressId;
