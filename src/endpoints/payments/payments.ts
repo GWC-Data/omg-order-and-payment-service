@@ -27,7 +27,8 @@ export const createPaymentOrderEndpoint = new Endpoint({
   handler: createPaymentOrderHandler,
   authType: EndpointAuthType.JWT,
   validator: createPaymentOrderValidator,
-  middleware: [middleware.checkPermission('CreatePaymentOrder')]
+  // middleware: [middleware.checkPermission('CreatePaymentOrder')]
+  middleware: [middleware.checkPermission(['AdminAccess', 'UserAccess'])]
 });
 
 export const listPaymentOrdersEndpoint = new Endpoint({
@@ -36,7 +37,8 @@ export const listPaymentOrdersEndpoint = new Endpoint({
   handler: listPaymentOrdersHandler,
   authType: EndpointAuthType.JWT,
   validator: listPaymentOrdersValidator,
-  middleware: [middleware.checkPermission('GetPaymentOrder')]
+  // middleware: [middleware.checkPermission('GetPaymentOrder')]
+  middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
 export const getPaymentOrderEndpoint = new Endpoint({
@@ -45,7 +47,8 @@ export const getPaymentOrderEndpoint = new Endpoint({
   handler: getPaymentOrderHandler,
   authType: EndpointAuthType.JWT,
   validator: getPaymentOrderValidator,
-  middleware: [middleware.checkPermission('GetPaymentOrder')]
+  // middleware: [middleware.checkPermission('GetPaymentOrder')]
+  middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
 export const verifyPaymentSignatureEndpoint = new Endpoint({
@@ -54,7 +57,8 @@ export const verifyPaymentSignatureEndpoint = new Endpoint({
   handler: verifyPaymentSignatureHandler,
   authType: EndpointAuthType.JWT,
   validator: verifyPaymentValidator,
-  middleware: [middleware.checkPermission('VerifyPayment')]
+  // middleware: [middleware.checkPermission('VerifyPayment')]
+  middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
 export const capturePaymentEndpoint = new Endpoint({
@@ -63,7 +67,8 @@ export const capturePaymentEndpoint = new Endpoint({
   handler: capturePaymentHandler,
   authType: EndpointAuthType.JWT,
   validator: capturePaymentValidator,
-  middleware: [middleware.checkPermission('CapturePayment')]
+  // middleware: [middleware.checkPermission('CapturePayment')]
+  middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
 export const razorpayWebhookEndpoint = new Endpoint({

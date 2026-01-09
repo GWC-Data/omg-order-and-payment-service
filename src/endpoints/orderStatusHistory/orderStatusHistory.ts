@@ -18,7 +18,8 @@ export const createOrderStatusHistoryEndpoint = new Endpoint({
   handler: createOrderStatusHistoryHandler,
   authType: EndpointAuthType.JWT,
   validator: createOrderStatusHistoryValidator,
-  middleware: [middleware.checkPermission('CreateOrderStatusHistory')]
+  // middleware: [middleware.checkPermission('CreateOrderStatusHistory')]
+  middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
 export const getAllOrderStatusHistoryEndpoint = new Endpoint({
@@ -27,7 +28,8 @@ export const getAllOrderStatusHistoryEndpoint = new Endpoint({
   handler: getAllOrderStatusHistoryHandler,
   authType: EndpointAuthType.JWT,
   validator: {},
-  middleware: [middleware.checkPermission('GetOrderStatusHistory')]
+  // middleware: [middleware.checkPermission('GetOrderStatusHistory')]
+  middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
 export const getOrderStatusHistoryByIdEndpoint = new Endpoint({
@@ -36,7 +38,8 @@ export const getOrderStatusHistoryByIdEndpoint = new Endpoint({
   handler: getOrderStatusHistoryByIdHandler,
   authType: EndpointAuthType.JWT,
   validator: getOrderStatusHistoryByIdValidator,
-  middleware: [middleware.checkPermission('GetOrderStatusHistory')]
+  // middleware: [middleware.checkPermission('GetOrderStatusHistory')]
+  middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
 export const deleteOrderStatusHistoryEndpoint = new Endpoint({
@@ -45,7 +48,8 @@ export const deleteOrderStatusHistoryEndpoint = new Endpoint({
   handler: deleteOrderStatusHistoryHandler,
   authType: EndpointAuthType.JWT,
   validator: getOrderStatusHistoryByIdValidator,
-  middleware: [middleware.checkPermission('DeleteOrderStatusHistory')]
+  // middleware: [middleware.checkPermission('DeleteOrderStatusHistory')]
+  middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
 
