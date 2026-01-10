@@ -8,8 +8,5 @@ export const downloadOrderInvoiceEndpoint = new Endpoint({
   handler: downloadOrderInvoiceHandler,
   authType: EndpointAuthType.JWT,
   validator: orderInvoiceParamsValidator,
-  // middleware: [middleware.checkPermission('DownloadInvoice')]
   middleware: [middleware.checkPermission(['AdminAccess', 'UserAccess'])]
 });
-
-

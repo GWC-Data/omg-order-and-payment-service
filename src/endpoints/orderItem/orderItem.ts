@@ -16,7 +16,6 @@ export const createOrderItemEndpoint = new Endpoint({
   handler: createOrderItemHandler,
   authType: EndpointAuthType.JWT,
   validator: createOrderItemValidator,
-  // middleware: [middleware.checkPermission('CreateOrderItem')]
   middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
@@ -26,7 +25,6 @@ export const getAllOrderItemsEndpoint = new Endpoint({
   handler: getAllOrderItemsHandler,
   authType: EndpointAuthType.JWT,
   validator: {},
-  // middleware: [middleware.checkPermission('GetOrderItem')]
   middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
@@ -36,7 +34,6 @@ export const getOrderItemByIdEndpoint = new Endpoint({
   handler: getOrderItemByIdHandler,
   authType: EndpointAuthType.JWT,
   validator: {},
-  // middleware: [middleware.checkPermission('GetOrderItem')]
   middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
@@ -46,7 +43,6 @@ export const updateOrderItemEndpoint = new Endpoint({
   handler: updateOrderItemHandler,
   authType: EndpointAuthType.JWT,
   validator: updateOrderItemValidator,
-  // middleware: [middleware.checkPermission('UpdateOrderItem')]
   middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
@@ -56,8 +52,5 @@ export const deleteOrderItemEndpoint = new Endpoint({
   handler: deleteOrderItemHandler,
   authType: EndpointAuthType.JWT,
   validator: {},
-  // middleware: [middleware.checkPermission('DeleteOrderItem')]
   middleware: [middleware.checkPermission(['AdminAccess'])]
 });
-
-

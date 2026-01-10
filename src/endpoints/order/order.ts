@@ -18,8 +18,7 @@ export const createOrderEndpoint = new Endpoint({
   handler: createOrderHandler,
   authType: EndpointAuthType.JWT,
   validator: createOrderValidator,
-  // middleware: [middleware.checkPermission('CreateOrder')]
-  middleware: [middleware.checkPermission(['AdminAccess', 'UserAccess'])]
+  middleware: [middleware.checkPermission(['UserAccess'])]
 });
 
 export const getAllOrdersEndpoint = new Endpoint({
@@ -28,8 +27,7 @@ export const getAllOrdersEndpoint = new Endpoint({
   handler: getAllOrdersHandler,
   authType: EndpointAuthType.JWT,
   validator: {},
-  // middleware: [middleware.checkPermission('GetOrder')]
-  middleware: [middleware.checkPermission(['AdminAccess', 'UserAccess'])]
+  middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
 export const getOrderByIdEndpoint = new Endpoint({
@@ -38,7 +36,6 @@ export const getOrderByIdEndpoint = new Endpoint({
   handler: getOrderByIdHandler,
   authType: EndpointAuthType.JWT,
   validator: {},
-  // middleware: [middleware.checkPermission('GetOrder')]
   middleware: [middleware.checkPermission(['AdminAccess', 'UserAccess'])]
 });
 
@@ -48,7 +45,6 @@ export const getOrdersByUserIdEndpoint = new Endpoint({
   handler: getOrdersByUserIdHandler,
   authType: EndpointAuthType.JWT,
   validator: getOrdersByUserIdValidator,
-  // middleware: [middleware.checkPermission('GetOrder')]
   middleware: [middleware.checkPermission(['AdminAccess', 'UserAccess'])]
 });
 
@@ -58,7 +54,6 @@ export const getOrderDetailsEndpoint = new Endpoint({
   handler: getOrderDetailsHandler,
   authType: EndpointAuthType.JWT,
   validator: getOrderDetailsValidator,
-  // middleware: [middleware.checkPermission('GetOrder')]
   middleware: [middleware.checkPermission(['AdminAccess', 'UserAccess'])]
 });
 
@@ -68,7 +63,6 @@ export const updateOrderEndpoint = new Endpoint({
   handler: updateOrderHandler,
   authType: EndpointAuthType.JWT,
   validator: updateOrderValidator,
-  // middleware: [middleware.checkPermission('UpdateOrder')]
   middleware: [middleware.checkPermission(['AdminAccess'])]
 });
 
@@ -78,8 +72,5 @@ export const deleteOrderEndpoint = new Endpoint({
   handler: deleteOrderHandler,
   authType: EndpointAuthType.JWT,
   validator: {},
-  // middleware: [middleware.checkPermission('DeleteOrder')]
   middleware: [middleware.checkPermission(['AdminAccess'])]
 });
-
-
