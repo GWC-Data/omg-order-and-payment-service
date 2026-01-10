@@ -68,13 +68,40 @@ export const verifyPaymentValidator: Schema = {
   userId: {
     in: 'body',
     exists: { errorMessage: 'User ID is required' },
-    isUUID: { errorMessage: 'User ID must be a valid UUID' }
+    isUUID: { 
+      errorMessage: 'User ID must be a valid UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000"). Numeric IDs like "1" or "2" are not allowed.',
+      options: { version: '4' }
+    },
+    custom: {
+      options: (value: unknown) => {
+        if (typeof value !== 'string') return false;
+        // Reject numeric strings
+        if (/^\d+$/.test(value)) {
+          throw new Error('User ID cannot be a numeric value. Must be a valid UUID.');
+        }
+        return true;
+      }
+    }
   },
   templeId: {
     in: 'body',
     optional: true,
     // exists: { errorMessage: 'Temple ID is required' },
-    isUUID: { errorMessage: 'Temple ID must be a valid UUID' }
+    isUUID: { 
+      errorMessage: 'Temple ID must be a valid UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000"). Numeric IDs like "1" or "2" are not allowed.',
+      options: { version: '4' } // Ensure UUID v4 format
+    },
+    custom: {
+      options: (value: unknown) => {
+        if (value === undefined || value === null || value === '') return true; // Optional field
+        if (typeof value !== 'string') return false;
+        // Reject numeric strings
+        if (/^\d+$/.test(value)) {
+          throw new Error('Temple ID cannot be a numeric value. Must be a valid UUID.');
+        }
+        return true;
+      }
+    }
   },
   orderType: {
     in: 'body',
@@ -86,7 +113,25 @@ export const verifyPaymentValidator: Schema = {
   },
 
   // Optional order fields
-  addressId: { in: 'body', optional: true, isUUID: { errorMessage: 'addressId must be a valid UUID' } },
+  addressId: { 
+    in: 'body', 
+    optional: true, 
+    isUUID: { 
+      errorMessage: 'Address ID must be a valid UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000"). Numeric IDs like "1" or "2" are not allowed.',
+      options: { version: '4' }
+    },
+    custom: {
+      options: (value: unknown) => {
+        if (value === undefined || value === null || value === '') return true; // Optional field
+        if (typeof value !== 'string') return false;
+        // Reject numeric strings
+        if (/^\d+$/.test(value)) {
+          throw new Error('Address ID cannot be a numeric value. Must be a valid UUID.');
+        }
+        return true;
+      }
+    }
+  },
   status: {
     in: 'body',
     optional: true,

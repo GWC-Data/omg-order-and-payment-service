@@ -9,12 +9,18 @@ import {
 import { Response } from 'express';
 import { PaymentOrder, PaymentStatus, Order, OrderItem, OrderStatusHistory } from 'db/models';
 import { randomUUID } from 'crypto';
-import { QueryTypes } from 'sequelize';
+import { QueryTypes, Transaction } from 'sequelize';
 import {
   getRazorpayClient,
   verifyPaymentSignature,
   verifyWebhookSignature
 } from 'utils';
+import {
+  isValidUUID,
+  sanitizeUUID,
+  sanitizeUUIDFields,
+  validateRequiredUUID
+} from 'utils/uuidValidator';
 import {
   PAYMENT_CAPTURE_FAILED,
   PAYMENT_DETAILS_FETCH_FAILED,
@@ -342,11 +348,24 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       return;
     }
 
+    // Validate and sanitize UUID fields
+    const sanitizedBody = sanitizeUUIDFields(body, ['userId', 'templeId', 'addressId']);
+    
+    // Validate required userId UUID
+    if (!sanitizedBody.userId) {
+      console.error('[ERROR] userId is required and must be a valid UUID');
+      res.status(400).json({ 
+        message: 'User ID is required and must be a valid UUID format',
+        error: `Invalid userId format: "${body.userId}". Expected UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000").`
+      });
+      return;
+    }
+
     const orderDataToStore = {
-      userId: body.userId,
+      userId: sanitizedBody.userId,
       orderType: body.orderType,
-      templeId: body.templeId,
-      addressId: body.addressId,
+      templeId: sanitizedBody.templeId || null, // Set to null if invalid UUID
+      addressId: sanitizedBody.addressId || null, // Set to null if invalid UUID
       status: body.status ?? 'pending',
       scheduledDate: body.scheduledDate,
       scheduledTimestamp: body.scheduledTimestamp,
@@ -397,14 +416,88 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
       try {
         console.log(`[VERIFY] Creating Order immediately after payment verification for ${body.razorpay_order_id}`);
-        const createdAppOrder = await createOrderFromPaymentOrderData(updatedOrder, orderData, req.headers.authorization as string);
+        
+        // Validate UUIDs before attempting order creation
+        const sanitizedOrderData = sanitizeUUIDFields(orderData, ['userId', 'templeId', 'addressId']);
+        
+        if (!sanitizedOrderData.userId) {
+          throw new Error(`Invalid userId in orderData: "${orderData.userId}". Must be a valid UUID.`);
+        }
+        
+        // Update orderData with sanitized UUIDs
+        const validatedOrderData = {
+          ...orderData,
+          userId: sanitizedOrderData.userId,
+          templeId: sanitizedOrderData.templeId || null,
+          addressId: sanitizedOrderData.addressId || null,
+        };
+        
+        const createdAppOrder = await createOrderFromPaymentOrderData(updatedOrder, validatedOrderData, req.headers.authorization as string);
         if (createdAppOrder && createdAppOrder.id) {
           appOrderId = String(createdAppOrder.id);
           console.log(`[VERIFY] Successfully created Order ${appOrderId} immediately after payment verification`);
+        } else {
+          // Order creation failed - log detailed error
+          console.error('[VERIFY] Order creation returned null/undefined. Order data:', {
+            userId: validatedOrderData.userId,
+            orderType: validatedOrderData.orderType,
+            templeId: validatedOrderData.templeId,
+            addressId: validatedOrderData.addressId,
+            hasOrderItems: !!validatedOrderData.orderItems,
+            orderItemsCount: validatedOrderData.orderItems?.length || 0
+          });
+          
+          // Store failure in metadata for retry
+          await updatedOrder.update({
+            metadata: {
+              ...updatedMetadata,
+              orderCreationFailed: true,
+              orderCreationError: 'Order creation returned null',
+              orderCreationAttemptedAt: new Date().toISOString()
+            }
+          } as any);
         }
       } catch (orderCreateError) {
-        console.error('[VERIFY] Failed to create order immediately, will be created via webhook:', orderCreateError);
+        const error = orderCreateError as Error;
+        console.error('[VERIFY] Failed to create order immediately:', error.message);
+        console.error('[VERIFY] Error stack:', error.stack);
+        console.error('[VERIFY] Order data that failed:', {
+          userId: orderData.userId,
+          orderType: orderData.orderType,
+          templeId: orderData.templeId,
+          addressId: orderData.addressId,
+        });
+        
+        // Store failure details in metadata for retry
+        await updatedOrder.update({
+          metadata: {
+            ...updatedMetadata,
+            orderCreationFailed: true,
+            orderCreationError: error.message,
+            orderCreationErrorStack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+            orderCreationAttemptedAt: new Date().toISOString()
+          }
+        } as any);
+        
         reportError(orderCreateError);
+        
+        // If it's a UUID validation error, return specific error to client
+        if (error.message.includes('Invalid UUID') || error.message.includes('invalid input syntax for type uuid')) {
+          res.status(400).json({
+            message: 'Order creation failed due to invalid UUID format',
+            error: error.message,
+            details: {
+              userId: orderData.userId,
+              templeId: orderData.templeId,
+              addressId: orderData.addressId,
+              suggestion: 'Please ensure all ID fields are valid UUIDs (e.g., "550e8400-e29b-41d4-a716-446655440000")'
+            }
+          });
+          return;
+        }
+        
+        // For other errors, still return success but note that order will be created via webhook
+        // This maintains backward compatibility but logs the issue
       }
     }
 
@@ -491,6 +584,22 @@ async function createOrderFromPaymentOrderData(
       console.error('[WEBHOOK] orderType is required but missing in orderData');
       return null;
     }
+
+    // Validate and sanitize UUID fields
+    const sanitizedOrderData = sanitizeUUIDFields(orderData, ['userId', 'templeId', 'addressId']);
+    
+    if (!sanitizedOrderData.userId) {
+      console.error(`[WEBHOOK] Invalid userId format: "${orderData.userId}". Must be a valid UUID.`);
+      return null;
+    }
+    
+    // Update orderData with sanitized UUIDs
+    orderData = {
+      ...orderData,
+      userId: sanitizedOrderData.userId,
+      templeId: sanitizedOrderData.templeId || null,
+      addressId: sanitizedOrderData.addressId || null,
+    };
 
     const paymentOrderJson = paymentOrder.toJSON ? paymentOrder.toJSON() : paymentOrder;
     const metadata = (paymentOrderJson.metadata as Record<string, unknown> | undefined) ?? {};
@@ -605,8 +714,23 @@ async function createOrderFromPaymentOrderData(
         orderDataToCreate.paymentId = paymentOrderJson.id;
       }
 
-      if (orderData.templeId) orderDataToCreate.templeId = orderData.templeId;
-      if (orderData.addressId) orderDataToCreate.addressId = orderData.addressId;
+      // Validate and sanitize UUID fields before creating order
+      const sanitizedOrderData = sanitizeUUIDFields(orderData, ['userId', 'templeId', 'addressId']);
+      
+      // Validate required userId
+      if (!sanitizedOrderData.userId) {
+        throw new Error(`Invalid userId in orderData: "${orderData.userId}". Must be a valid UUID.`);
+      }
+      
+      orderDataToCreate.userId = sanitizedOrderData.userId;
+      
+      // Only set templeId/addressId if they are valid UUIDs
+      if (sanitizedOrderData.templeId) {
+        orderDataToCreate.templeId = sanitizedOrderData.templeId;
+      }
+      if (sanitizedOrderData.addressId) {
+        orderDataToCreate.addressId = sanitizedOrderData.addressId;
+      }
       if (orderData.scheduledDate) orderDataToCreate.scheduledDate = orderData.scheduledDate;
       if (orderData.scheduledTimestamp) orderDataToCreate.scheduledTimestamp = orderData.scheduledTimestamp;
       if (orderData.fulfillmentType) orderDataToCreate.fulfillmentType = orderData.fulfillmentType;
@@ -676,18 +800,27 @@ async function createOrderFromPaymentOrderData(
                   throw new Error(`OrderItem missing required field 'itemType': ${JSON.stringify(item)}`);
                 }
 
+                // Sanitize UUID fields in order items
+                const sanitizedItem = sanitizeUUIDFields(item, [
+                  'itemId',
+                  'productId',
+                  'pujaId',
+                  'prasadId',
+                  'dharshanId'
+                ]);
+
                 return await OrderItem.create({
                   id: randomUUID(),
                   orderId: orderId,
                   itemType: item.itemType,
-                  itemId: item.itemId || null,
+                  itemId: sanitizedItem.itemId || null,
                   itemName: item.itemName || null,
                   itemDescription: item.itemDescription || null,
                   itemImageUrl: item.itemImageUrl || null,
-                  productId: item.productId || null,
-                  pujaId: item.pujaId || null,
-                  prasadId: item.prasadId || null,
-                  dharshanId: item.dharshanId || null,
+                  productId: sanitizedItem.productId || null,
+                  pujaId: sanitizedItem.pujaId || null,
+                  prasadId: sanitizedItem.prasadId || null,
+                  dharshanId: sanitizedItem.dharshanId || null,
                   quantity: item.quantity || null,
                   unitPrice: item.unitPrice ? String(item.unitPrice) : null,
                   totalPrice: item.totalPrice ? String(item.totalPrice) : null,
