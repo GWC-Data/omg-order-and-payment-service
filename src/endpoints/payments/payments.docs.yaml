@@ -258,7 +258,7 @@
         description: Razorpay API error
         $ref: '#/components/responses/RazorpayError'
 
-/payments/webhook/razorpay:
+webhook-razorpay-payments:
   post:
     summary: Razorpay webhook endpoint
     description: >
