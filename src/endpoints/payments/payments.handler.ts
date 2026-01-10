@@ -76,7 +76,7 @@ export const createPaymentOrderHandler: EndpointHandler<
   res: Response
 ) => {
   const body = req.body as CreatePaymentOrderBody;
-  const userId = body.userId?.trim();
+  const userId = body.userId?.trim() || ((req as any).user as any)?.id;
 
   if (!userId) {
     res.status(400).json({ message: USER_ID_REQUIRED });
@@ -112,15 +112,16 @@ export const createPaymentOrderHandler: EndpointHandler<
       )
     } as any);
 
+    const recordJson = record.toJSON ? record.toJSON() : record;
+
     res.status(201).json({
       message: 'Payment order created successfully.',
       order,
-      record
+      record: recordJson
     });
   } catch (error) {
     console.error('Payment order creation failed:', (error as Error).message);
 
-    // Check for specific Razorpay errors
     const errorMessage = (error as Error).message;
     let statusCode = 502;
     let responseMessage = PAYMENT_ORDER_CREATION_FAILED;
@@ -168,8 +169,10 @@ export const listPaymentOrdersHandler: EndpointHandler<
       order: [['createdAt', 'DESC']]
     });
 
+    const data = rows.map(row => row.toJSON ? row.toJSON() : row);
+
     res.status(200).json({
-      data: rows,
+      data,
       page: Number(page),
       pageSize: Number(pageSize),
       total: count
@@ -207,8 +210,10 @@ export const getPaymentOrderHandler: EndpointHandler<
       client.payments.all({ order_id: orderId } as Record<string, unknown>)
     ]);
 
+    const recordJson = record.toJSON ? record.toJSON() : record;
+
     res.status(200).json({
-      record,
+      record: recordJson,
       remoteOrder,
       payments
     });
@@ -295,39 +300,30 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       return;
     }
 
+    const orderJson = order.toJSON ? order.toJSON() : order;
+
     if (
-      order.razorpayPaymentId &&
-      order.razorpayPaymentId !== body.razorpay_payment_id
+      orderJson.razorpayPaymentId &&
+      orderJson.razorpayPaymentId !== body.razorpay_payment_id
     ) {
-      console.warn(`Payment ID mismatch for order ${body.razorpay_order_id}: existing ${order.razorpayPaymentId}, received ${body.razorpay_payment_id}`);
+      console.warn(`Payment ID mismatch for order ${body.razorpay_order_id}: existing ${orderJson.razorpayPaymentId}, received ${body.razorpay_payment_id}`);
       res.status(409).json({ message: PAYMENT_ORDER_ALREADY_PROCESSED });
       return;
     }
 
-    // Prevent double processing
-    if (order.status === 'paid' || order.status === 'captured') {
-      console.warn(`Order ${body.razorpay_order_id} already processed with status: ${order.status}`);
-      const existingAppOrderId = (order.metadata as any)?.appOrderId as string | undefined;
+    if (orderJson.status === 'paid' || orderJson.status === 'captured') {
+      console.warn(`Order ${body.razorpay_order_id} already processed with status: ${orderJson.status}`);
+      const existingAppOrderId = ((orderJson.metadata as any) || {})?.appOrderId as string | undefined;
       res.status(200).json({
         message: 'Payment already verified',
-        order,
+        order: orderJson,
         appOrderId: existingAppOrderId
       });
       return;
     }
 
-    // Update status to 'paid' unless already captured (which would be handled by webhooks)
-    await order.update({
-      razorpayPaymentId: body.razorpay_payment_id,
-      razorpaySignature: body.razorpay_signature,
-      status: 'paid' as PaymentStatus
-    });
-
-    // Store orderData in PaymentOrder.metadata for webhook access
-    // Order creation will happen in webhook handlers (handlePaymentCaptured or handleOrderPaid)
-    const metadata = (order.metadata as Record<string, unknown> | undefined) ?? {};
+    const metadata = (orderJson.metadata as Record<string, unknown> | undefined) ?? {};
     
-    // Validate required fields for storing orderData
     if (!body.userId) {
       console.error('[ERROR] userId is required but missing in request body');
       res.status(400).json({ 
@@ -346,45 +342,77 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       return;
     }
 
-    // Store complete order data in metadata if not already stored (for webhook access)
-    if (!(metadata as any).orderData) {
-      const orderDataToStore = {
-        userId: body.userId,
-        orderType: body.orderType,
-        templeId: body.templeId,
-        addressId: body.addressId,
-        status: body.status,
-        scheduledDate: body.scheduledDate,
-        scheduledTimestamp: body.scheduledTimestamp,
-        fulfillmentType: body.fulfillmentType,
-        subtotal: body.subtotal,
-        discountAmount: body.discountAmount,
-        convenienceFee: body.convenienceFee,
-        taxAmount: body.taxAmount,
-        totalAmount: body.totalAmount,
-        currency: body.currency,
-        contactName: body.contactName,
-        contactPhone: body.contactPhone,
-        contactEmail: body.contactEmail,
-        shippingAddress: body.shippingAddress,
-        deliveryType: body.deliveryType,
-        orderItems: body.orderItems,
-        rudrakshaBookingData: body.rudrakshaBookingData
-      };
+    const orderDataToStore = {
+      userId: body.userId,
+      orderType: body.orderType,
+      templeId: body.templeId,
+      addressId: body.addressId,
+      status: body.status ?? 'pending',
+      scheduledDate: body.scheduledDate,
+      scheduledTimestamp: body.scheduledTimestamp,
+      fulfillmentType: body.fulfillmentType,
+      subtotal: body.subtotal,
+      discountAmount: body.discountAmount,
+      convenienceFee: body.convenienceFee,
+      taxAmount: body.taxAmount,
+      totalAmount: body.totalAmount,
+      currency: body.currency,
+      contactName: body.contactName,
+      contactPhone: body.contactPhone,
+      contactEmail: body.contactEmail,
+      shippingAddress: body.shippingAddress,
+      deliveryType: body.deliveryType,
+      orderItems: body.orderItems,
+      rudrakshaBookingData: body.rudrakshaBookingData
+    };
 
-      await order.update({
-        metadata: {
-          ...metadata,
-          orderData: orderDataToStore,
-          razorpayPaymentId: body.razorpay_payment_id
-        }
-      } as any);
+    await order.update({
+      razorpayPaymentId: body.razorpay_payment_id,
+      razorpaySignature: body.razorpay_signature,
+      status: 'paid' as PaymentStatus,
+      metadata: {
+        ...metadata,
+        orderData: orderDataToStore,
+        razorpayPaymentId: body.razorpay_payment_id,
+        verifiedAt: new Date().toISOString()
+      }
+    } as any);
+
+    const updatedOrder = await PaymentOrder.findOne({
+      where: { razorpayOrderId: body.razorpay_order_id }
+    });
+
+    if (!updatedOrder) {
+      res.status(500).json({ message: 'Failed to update payment order' });
+      return;
     }
 
-    console.log(`Payment verified successfully for order ${body.razorpay_order_id}. Order will be created via webhook.`);
+    const updatedOrderJson = updatedOrder.toJSON ? updatedOrder.toJSON() : updatedOrder;
+    const updatedMetadata = (updatedOrderJson.metadata as Record<string, unknown> | undefined) ?? {};
+    const orderData = updatedMetadata.orderData as any;
+    const existingAppOrderId = updatedMetadata.appOrderId as string | undefined;
+
+    let appOrderId = existingAppOrderId;
+
+    if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
+      try {
+        console.log(`[VERIFY] Creating Order immediately after payment verification for ${body.razorpay_order_id}`);
+        const createdAppOrder = await createOrderFromPaymentOrderData(updatedOrder, orderData, req.headers.authorization as string);
+        if (createdAppOrder && createdAppOrder.id) {
+          appOrderId = String(createdAppOrder.id);
+          console.log(`[VERIFY] Successfully created Order ${appOrderId} immediately after payment verification`);
+        }
+      } catch (orderCreateError) {
+        console.error('[VERIFY] Failed to create order immediately, will be created via webhook:', orderCreateError);
+        reportError(orderCreateError);
+      }
+    }
+
+    console.log(`Payment verified successfully for order ${body.razorpay_order_id}. ${appOrderId ? `Order ${appOrderId} created.` : 'Order will be created via webhook.'}`);
     res.status(200).json({
-      message: 'Payment verified successfully. Order will be created via webhook.',
-      order,
+      message: appOrderId ? 'Payment verified and order created successfully.' : 'Payment verified successfully. Order will be created automatically via webhook.',
+      order: updatedOrderJson,
+      appOrderId: appOrderId,
       status: 'verified'
     });
   } catch (error) {
@@ -451,7 +479,7 @@ async function createOrderFromPaymentOrderData(
   paymentOrder: PaymentOrder,
   orderData: any,
   accessToken?: string
-): Promise<Order | null> {
+): Promise<any | null> {
   try {
     // Validate required fields
     if (!orderData.userId) {
@@ -464,14 +492,17 @@ async function createOrderFromPaymentOrderData(
       return null;
     }
 
-    // Check idempotency - if Order already exists, return it
-    const metadata = (paymentOrder.metadata as Record<string, unknown> | undefined) ?? {};
-    const existingAppOrderId = (metadata as any).appOrderId as string | undefined;
+    const paymentOrderJson = paymentOrder.toJSON ? paymentOrder.toJSON() : paymentOrder;
+    const metadata = (paymentOrderJson.metadata as Record<string, unknown> | undefined) ?? {};
+    const existingAppOrderId = metadata.appOrderId as string | undefined;
 
     if (existingAppOrderId) {
       console.log(`[WEBHOOK] Order already exists with id ${existingAppOrderId}, skipping creation`);
       const existingOrder = await Order.findByPk(existingAppOrderId);
-      return existingOrder;
+      if (existingOrder) {
+        return existingOrder.toJSON ? existingOrder.toJSON() : existingOrder;
+      }
+      return null;
     }
 
     // Check for duplicate Rudraksha booking if orderType is 'event' and booking data is provided
@@ -558,7 +589,8 @@ async function createOrderFromPaymentOrderData(
     // Create Order
     let createdOrder: Order | null = null;
     try {
-      // Prepare order data with all required fields
+      const paymentOrderJson = paymentOrder.toJSON ? paymentOrder.toJSON() : paymentOrder;
+
       const orderDataToCreate: any = {
         orderNumber: randomUUID(),
         userId: orderData.userId,
@@ -569,12 +601,10 @@ async function createOrderFromPaymentOrderData(
         paidAt: new Date()
       };
 
-      // Add payment ID from PaymentOrder
-      if (paymentOrder.id) {
-        orderDataToCreate.paymentId = paymentOrder.id;
+      if (paymentOrderJson.id) {
+        orderDataToCreate.paymentId = paymentOrderJson.id;
       }
 
-      // Add optional fields only if they exist
       if (orderData.templeId) orderDataToCreate.templeId = orderData.templeId;
       if (orderData.addressId) orderDataToCreate.addressId = orderData.addressId;
       if (orderData.scheduledDate) orderDataToCreate.scheduledDate = orderData.scheduledDate;
@@ -586,11 +616,11 @@ async function createOrderFromPaymentOrderData(
       if (orderData.taxAmount !== undefined) orderDataToCreate.taxAmount = String(orderData.taxAmount);
       if (orderData.totalAmount !== undefined) orderDataToCreate.totalAmount = String(orderData.totalAmount);
       if (orderData.currency) orderDataToCreate.currency = orderData.currency;
-      else if (paymentOrder.currency) orderDataToCreate.currency = paymentOrder.currency;
+      else if (paymentOrderJson.currency) orderDataToCreate.currency = paymentOrderJson.currency;
       if (orderData.contactName) orderDataToCreate.contactName = orderData.contactName;
       if (orderData.contactPhone) orderDataToCreate.contactPhone = orderData.contactPhone;
       if (orderData.contactEmail) orderDataToCreate.contactEmail = orderData.contactEmail;
-      else if (paymentOrder.customerEmail) orderDataToCreate.contactEmail = paymentOrder.customerEmail;
+      else if (paymentOrderJson.customerEmail) orderDataToCreate.contactEmail = paymentOrderJson.customerEmail;
       if (orderData.shippingAddress) orderDataToCreate.shippingAddress = orderData.shippingAddress;
       if (orderData.deliveryType) orderDataToCreate.deliveryType = orderData.deliveryType;
 
@@ -600,26 +630,26 @@ async function createOrderFromPaymentOrderData(
 
       createdOrder = await Order.create(orderDataToCreate);
       
-      // Verify order was created
       if (!createdOrder) {
         throw new Error('Order creation returned null/undefined');
       }
       
-      // Ensure id is accessible
-      if (!createdOrder.id) {
-        (createdOrder as any).id = orderId;
+      const createdOrderJson = createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
+      const finalOrderId = String(createdOrderJson.id || orderId);
+
+      if (!createdOrderJson.id) {
         console.warn('[WEBHOOK] [WARN] Order.id was not set by Sequelize, using generated id');
       }
 
-      // Update PaymentOrder metadata with appOrderId
+      const paymentOrderMetadata = paymentOrderJson.metadata as Record<string, unknown> | undefined;
       await paymentOrder.update({
         metadata: {
-          ...metadata,
-          appOrderId: createdOrder.id
+          ...paymentOrderMetadata,
+          appOrderId: finalOrderId
         }
       } as any);
 
-      console.log(`[WEBHOOK] [SUCCESS] Created Order ${createdOrder.id} for PaymentOrder ${paymentOrder.razorpayOrderId}`);
+      console.log(`[WEBHOOK] [SUCCESS] Created Order ${finalOrderId} for PaymentOrder ${paymentOrderJson.razorpayOrderId}`);
     } catch (orderCreateError) {
       const error = orderCreateError as Error;
       console.error('[WEBHOOK] [ERROR] Failed to create Order:', error.message);
@@ -627,12 +657,11 @@ async function createOrderFromPaymentOrderData(
       return null;
     }
 
-    // Create OrderItems if provided
     if (createdOrder && orderData.orderItems && Array.isArray(orderData.orderItems) && orderData.orderItems.length > 0) {
-      const orderId = String(createdOrder.get ? createdOrder.get('id') : (createdOrder as any).dataValues?.id || createdOrder.id);
+      const createdOrderJson = createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
+      const orderId = String(createdOrderJson.id);
       
       if (orderId && orderId !== 'undefined' && orderId !== 'null') {
-        // Check if orderItems already exist (idempotency)
         const existingOrderItems = await OrderItem.findAll({
           where: { orderId }
         });
@@ -672,7 +701,6 @@ async function createOrderFromPaymentOrderData(
           } catch (orderItemError) {
             console.error('[WEBHOOK] [ERROR] Failed to create orderItems:', orderItemError);
             reportError(orderItemError);
-            // Don't fail - order is already created
           }
         } else {
           console.log(`[WEBHOOK] OrderItems already exist for order ${orderId}, skipping creation`);
@@ -680,10 +708,12 @@ async function createOrderFromPaymentOrderData(
       }
     }
 
-    // Create OrderStatusHistory
     if (createdOrder) {
+      const createdOrderJson = createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
+      const orderId = String(createdOrderJson.id);
+
       const existingStatusHistory = await OrderStatusHistory.findOne({
-        where: { orderId: createdOrder.id }
+        where: { orderId }
       });
 
       if (!existingStatusHistory) {
@@ -691,29 +721,30 @@ async function createOrderFromPaymentOrderData(
           const initialStatus = orderData.status ?? 'pending';
           await OrderStatusHistory.create({
             id: randomUUID(),
-            orderId: createdOrder.id,
+            orderId: orderId,
             status: initialStatus,
             previousStatus: null,
             notes: 'Order created via Razorpay webhook',
             location: null
           } as any);
-          console.log(`[WEBHOOK] Created initial order status history for order ${createdOrder.id}`);
+          console.log(`[WEBHOOK] Created initial order status history for order ${orderId}`);
         } catch (statusHistoryError) {
           console.error('[WEBHOOK] [ERROR] Failed to create order status history:', statusHistoryError);
           reportError(statusHistoryError);
-          // Don't fail - order is already created
         }
       }
     }
 
-    // Create RudrakshaBooking if orderType is "event"
-    if (createdOrder && orderData.orderType === 'event' && orderData.rudrakshaBookingData && createdOrder.id) {
+    if (createdOrder && orderData.orderType === 'event' && orderData.rudrakshaBookingData) {
       try {
+        const createdOrderJson = createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
+        const orderId = String(createdOrderJson.id);
+
         const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
-        if (appcontrolUrl) {
+        if (appcontrolUrl && orderId) {
           const bookingPayload = {
             ...orderData.rudrakshaBookingData,
-            orderId: createdOrder.id
+            orderId: orderId
           };
 
           await request({
@@ -727,18 +758,20 @@ async function createOrderFromPaymentOrderData(
             timeout: 10000
           });
 
-          console.log(`[WEBHOOK] [SUCCESS] Created RudrakshaBooking for Order ${createdOrder.id}`);
+          console.log(`[WEBHOOK] [SUCCESS] Created RudrakshaBooking for Order ${orderId}`);
         } else {
           console.warn('[WEBHOOK] [WARN] APPCONTROL_SERVICE_URL not configured; skipping RudrakshaBooking creation');
         }
       } catch (bookingError) {
-        // Best-effort: log error but don't fail
         console.error('[WEBHOOK] [ERROR] Failed to create RudrakshaBooking:', bookingError);
         reportError(bookingError);
       }
     }
 
-    return createdOrder;
+    if (createdOrder) {
+      return createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
+    }
+    return null;
   } catch (error) {
     console.error('[WEBHOOK] [ERROR] createOrderFromPaymentOrderData failed:', error);
     reportError(error);
@@ -765,12 +798,13 @@ export const capturePaymentHandler: EndpointHandler<
       return;
     }
 
-    // Check if already captured
-    if (order.status === 'captured') {
+    const orderJson = order.toJSON ? order.toJSON() : order;
+
+    if (orderJson.status === 'captured') {
       console.warn(`Payment ${body.paymentId} already captured`);
       res.status(200).json({
         message: 'Payment already captured',
-        order
+        order: orderJson
       });
       return;
     }
@@ -778,7 +812,7 @@ export const capturePaymentHandler: EndpointHandler<
     const client = getRazorpayClient();
     const captureAmount = body.amount
       ? toMinorUnits(body.amount)
-      : order.amount;
+      : orderJson.amount;
 
     if (!captureAmount) {
       res.status(400).json({
@@ -790,7 +824,7 @@ export const capturePaymentHandler: EndpointHandler<
     const captureResponse = await client.payments.capture(
       body.paymentId,
       captureAmount,
-      (body.currency ?? order.currency ?? 'INR').toUpperCase()
+      (body.currency ?? orderJson.currency ?? 'INR').toUpperCase()
     );
 
     await order.update({
@@ -798,19 +832,24 @@ export const capturePaymentHandler: EndpointHandler<
       capturedAt: fromUnixTimestamp((captureResponse as any).captured_at),
       amount: Number(captureResponse.amount),
       failureReason: undefined
+    } as any);
+
+    const updatedOrder = await PaymentOrder.findOne({
+      where: { razorpayPaymentId: body.paymentId }
     });
+
+    const updatedOrderJson = updatedOrder?.toJSON ? updatedOrder.toJSON() : updatedOrder;
 
     console.log(`Payment ${body.paymentId} captured successfully`);
     res.status(200).json({
       message: 'Payment captured successfully',
       capture: captureResponse,
-      order
+      order: updatedOrderJson
     });
   } catch (error) {
     console.error('capturePaymentHandler error:', error);
     const errorMessage = (error as Error).message;
 
-    // Handle specific Razorpay capture errors
     let statusCode = 502;
     let responseMessage = PAYMENT_CAPTURE_FAILED;
 
@@ -840,25 +879,28 @@ async function handlePaymentAuthorized(paymentEntity: RazorpayPaymentEntity): Pr
     });
 
     if (!order) {
-      console.warn(`Order not found for payment ${paymentEntity.id}`);
+      console.warn(`[WEBHOOK] Order not found for payment ${paymentEntity.id}`);
       return;
     }
 
-    // Update payment status to authorized
+    const orderJson = order.toJSON ? order.toJSON() : order;
+    const metadata = (orderJson.metadata as Record<string, unknown> | undefined) ?? {};
+
     await order.update({
       razorpayPaymentId: paymentEntity.id,
       status: 'authorized',
       amount: paymentEntity.amount,
       failureReason: undefined,
       metadata: {
-        ...order.metadata,
-        razorpayPaymentEntity: paymentEntity
+        ...metadata,
+        razorpayPaymentEntity: paymentEntity,
+        authorizedAt: new Date().toISOString()
       }
-    });
+    } as any);
 
-    console.log(`Payment ${paymentEntity.id} authorized for order ${paymentEntity.order_id}`);
+    console.log(`[WEBHOOK] Payment ${paymentEntity.id} authorized for order ${paymentEntity.order_id}`);
   } catch (error) {
-    console.error('Error handling payment authorized event:', error);
+    console.error('[WEBHOOK] Error handling payment authorized event:', error);
     throw new Error(WEBHOOK_PAYMENT_UPDATE_FAILED);
   }
 }
@@ -870,11 +912,15 @@ async function handlePaymentCaptured(paymentEntity: RazorpayPaymentEntity): Prom
     });
 
     if (!order) {
-      console.warn(`Order not found for payment ${paymentEntity.id}`);
+      console.warn(`[WEBHOOK] Order not found for payment ${paymentEntity.id}`);
       return;
     }
 
-    // Update payment status to captured
+    const orderJson = order.toJSON ? order.toJSON() : order;
+    const metadata = (orderJson.metadata as Record<string, unknown> | undefined) ?? {};
+    const orderData = metadata.orderData as any;
+    const existingAppOrderId = metadata.appOrderId as string | undefined;
+
     await order.update({
       razorpayPaymentId: paymentEntity.id,
       status: 'captured',
@@ -882,25 +928,25 @@ async function handlePaymentCaptured(paymentEntity: RazorpayPaymentEntity): Prom
       capturedAt: fromUnixTimestamp(paymentEntity.captured_at),
       failureReason: undefined,
       metadata: {
-        ...order.metadata,
-        razorpayPaymentEntity: paymentEntity
+        ...metadata,
+        razorpayPaymentEntity: paymentEntity,
+        capturedAt: new Date().toISOString()
       }
-    });
+    } as any);
 
     console.log(`[WEBHOOK] Payment ${paymentEntity.id} captured for order ${paymentEntity.order_id}`);
-
-    // Check if order data exists in metadata and create order if not already created
-    const updatedMetadata = (order.metadata as any) || {};
-    const orderData = updatedMetadata.orderData;
-    const existingAppOrderId = updatedMetadata.appOrderId;
 
     if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
       try {
         console.log(`[WEBHOOK] Creating Order from webhook for payment ${paymentEntity.id}`);
-        await createOrderFromPaymentOrderData(order, orderData, undefined);
-        console.log(`[WEBHOOK] Successfully created Order from webhook for payment ${paymentEntity.id}`);
+        const refreshedOrder = await PaymentOrder.findOne({
+          where: { razorpayOrderId: paymentEntity.order_id }
+        });
+        if (refreshedOrder) {
+          await createOrderFromPaymentOrderData(refreshedOrder, orderData, undefined);
+          console.log(`[WEBHOOK] Successfully created Order from webhook for payment ${paymentEntity.id}`);
+        }
       } catch (orderCreateError) {
-        // Log but don't fail webhook - best effort
         console.error('[WEBHOOK] Failed to create order from webhook:', orderCreateError);
         reportError(orderCreateError);
       }
@@ -922,25 +968,28 @@ async function handlePaymentFailed(paymentEntity: RazorpayPaymentEntity): Promis
     });
 
     if (!order) {
-      console.warn(`Order not found for payment ${paymentEntity.id}`);
+      console.warn(`[WEBHOOK] Order not found for payment ${paymentEntity.id}`);
       return;
     }
 
-    // Update payment status to failed
+    const orderJson = order.toJSON ? order.toJSON() : order;
+    const metadata = (orderJson.metadata as Record<string, unknown> | undefined) ?? {};
+
     await order.update({
       razorpayPaymentId: paymentEntity.id,
       status: 'failed',
       amount: paymentEntity.amount,
       failureReason: paymentEntity.error_description || 'Payment failed',
       metadata: {
-        ...order.metadata,
-        razorpayPaymentEntity: paymentEntity
+        ...metadata,
+        razorpayPaymentEntity: paymentEntity,
+        failedAt: new Date().toISOString()
       }
-    });
+    } as any);
 
-    console.log(`Payment ${paymentEntity.id} failed for order ${paymentEntity.order_id}: ${paymentEntity.error_description}`);
+    console.log(`[WEBHOOK] Payment ${paymentEntity.id} failed for order ${paymentEntity.order_id}: ${paymentEntity.error_description}`);
   } catch (error) {
-    console.error('Error handling payment failed event:', error);
+    console.error('[WEBHOOK] Error handling payment failed event:', error);
     throw new Error(WEBHOOK_PAYMENT_UPDATE_FAILED);
   }
 }
@@ -952,35 +1001,39 @@ async function handleOrderPaid(orderEntity: RazorpayOrderEntity): Promise<void> 
     });
 
     if (!order) {
-      console.warn(`Order not found: ${orderEntity.id}`);
+      console.warn(`[WEBHOOK] Order not found: ${orderEntity.id}`);
       return;
     }
 
-    // Update order status to paid if not already captured
-    if (order.status !== 'captured') {
+    const orderJson = order.toJSON ? order.toJSON() : order;
+    const metadata = (orderJson.metadata as Record<string, unknown> | undefined) ?? {};
+    const orderData = metadata.orderData as any;
+    const existingAppOrderId = metadata.appOrderId as string | undefined;
+
+    if (orderJson.status !== 'captured') {
       await order.update({
         status: 'paid',
         metadata: {
-          ...order.metadata,
-          razorpayOrderEntity: orderEntity
+          ...metadata,
+          razorpayOrderEntity: orderEntity,
+          paidAt: new Date().toISOString()
         }
-      });
+      } as any);
     }
 
     console.log(`[WEBHOOK] Order ${orderEntity.id} marked as paid`);
 
-    // Check if order data exists in metadata and create order if not already created
-    const updatedMetadata = (order.metadata as any) || {};
-    const orderData = updatedMetadata.orderData;
-    const existingAppOrderId = updatedMetadata.appOrderId;
-
     if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
       try {
         console.log(`[WEBHOOK] Creating Order from webhook for Razorpay order ${orderEntity.id}`);
-        await createOrderFromPaymentOrderData(order, orderData, undefined);
-        console.log(`[WEBHOOK] Successfully created Order from webhook for Razorpay order ${orderEntity.id}`);
+        const refreshedOrder = await PaymentOrder.findOne({
+          where: { razorpayOrderId: orderEntity.id }
+        });
+        if (refreshedOrder) {
+          await createOrderFromPaymentOrderData(refreshedOrder, orderData, undefined);
+          console.log(`[WEBHOOK] Successfully created Order from webhook for Razorpay order ${orderEntity.id}`);
+        }
       } catch (orderCreateError) {
-        // Log but don't fail webhook - best effort
         console.error('[WEBHOOK] Failed to create order from webhook:', orderCreateError);
         reportError(orderCreateError);
       }
@@ -1003,26 +1056,30 @@ export const razorpayWebhookHandler: EndpointHandler<
 ) => {
   try {
     const signature = req.headers['x-razorpay-signature'] as string;
-    const rawBody = JSON.stringify(req.body);
+    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
 
-    // Verify webhook signature
+    if (!signature) {
+      console.error('[WEBHOOK] Missing X-Razorpay-Signature header');
+      res.status(400).json({ message: WEBHOOK_SIGNATURE_INVALID });
+      return;
+    }
+
     if (!verifyWebhookSignature(rawBody, signature)) {
-      console.error('Invalid webhook signature');
+      console.error('[WEBHOOK] Invalid webhook signature');
       res.status(400).json({ message: WEBHOOK_SIGNATURE_INVALID });
       return;
     }
 
     const payload = req.body as RazorpayWebhookPayload;
 
-    // Validate payload structure
     if (!payload.event || !payload.payload) {
+      console.error('[WEBHOOK] Invalid payload structure');
       res.status(400).json({ message: WEBHOOK_PAYLOAD_INVALID });
       return;
     }
 
-    console.log(`Processing webhook event: ${payload.event}`);
+    console.log(`[WEBHOOK] Processing webhook event: ${payload.event}`);
 
-    // Process different webhook events
     try {
       switch (payload.event) {
         case RAZORPAY_EVENT_PAYMENT_AUTHORIZED:
@@ -1051,12 +1108,11 @@ export const razorpayWebhookHandler: EndpointHandler<
 
         case RAZORPAY_EVENT_REFUND_CREATED:
         case RAZORPAY_EVENT_REFUND_PROCESSED:
-          // Handle refund events (can be implemented later if needed)
-          console.log(`Refund event received: ${payload.event}`);
+          console.log(`[WEBHOOK] Refund event received: ${payload.event}`);
           break;
 
         default:
-          console.warn(`Unsupported webhook event: ${payload.event}`);
+          console.warn(`[WEBHOOK] Unsupported webhook event: ${payload.event}`);
           res.status(200).json({
             message: WEBHOOK_EVENT_UNSUPPORTED,
             event: payload.event
@@ -1064,13 +1120,14 @@ export const razorpayWebhookHandler: EndpointHandler<
           return;
       }
 
+      console.log(`[WEBHOOK] Successfully processed event: ${payload.event}`);
       res.status(200).json({
         message: 'Webhook processed successfully',
         event: payload.event
       });
 
     } catch (processingError) {
-      console.error('Error processing webhook:', processingError);
+      console.error('[WEBHOOK] Error processing webhook:', processingError);
       res.status(500).json({
         message: WEBHOOK_PROCESSING_FAILED,
         error: (processingError as Error).message

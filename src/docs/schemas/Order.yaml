@@ -1,0 +1,117 @@
+Order:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    orderNumber:
+      type: string
+      format: uuid
+    userId:
+      type: string
+      format: uuid
+    templeId:
+      type: string
+      format: uuid
+      nullable: true
+    addressId:
+      type: string
+      format: uuid
+      nullable: true
+    orderType:
+      type: string
+      enum: [darshan, puja, prasad, product, event]
+    status:
+      type: string
+      enum: [pending, confirmed, processing, ready, shipped, completed, cancelled, refunded]
+    scheduledDate:
+      type: string
+      format: date
+      nullable: true
+    scheduledTimestamp:
+      type: string
+      format: date-time
+      nullable: true
+    fulfillmentType:
+      type: string
+      enum: [pickup, delivery, in_person, digital]
+      nullable: true
+    subtotal:
+      type: string
+      nullable: true
+    discountAmount:
+      type: string
+      nullable: true
+    convenienceFee:
+      type: string
+      nullable: true
+    taxAmount:
+      type: string
+      nullable: true
+    totalAmount:
+      type: string
+      nullable: true
+    currency:
+      type: string
+      nullable: true
+    paymentStatus:
+      type: string
+      enum: [pending, paid, failed, refunded]
+    paymentMethod:
+      type: string
+      nullable: true
+    paymentId:
+      type: string
+      format: uuid
+      nullable: true
+    paidAt:
+      type: string
+      format: date-time
+      nullable: true
+    trackingNumber:
+      type: string
+      nullable: true
+    carrier:
+      type: string
+      nullable: true
+    shippedAt:
+      type: string
+      format: date-time
+      nullable: true
+    deliveredAt:
+      type: string
+      format: date-time
+      nullable: true
+    contactName:
+      type: string
+      nullable: true
+    contactPhone:
+      type: string
+      nullable: true
+    contactEmail:
+      type: string
+      format: email
+      nullable: true
+    cancelledAt:
+      type: string
+      format: date-time
+      nullable: true
+    cancellationReason:
+      type: string
+      nullable: true
+    refundAmount:
+      type: string
+      nullable: true
+    shippingAddress:
+      type: string
+      nullable: true
+    deliveryType:
+      type: string
+      enum: [standard, express]
+      nullable: true
+    createdAt:
+      type: string
+      format: date-time
+    updatedAt:
+      type: string
+      format: date-time

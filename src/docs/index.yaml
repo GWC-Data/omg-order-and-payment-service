@@ -31,6 +31,14 @@ components:
       $ref: './schemas/VerifyPaymentRequest.yaml#/VerifyPaymentRequest'
     CapturePaymentRequest:
       $ref: './schemas/CapturePaymentRequest.yaml#/CapturePaymentRequest'
+    Order:
+      $ref: './schemas/Order.yaml#/Order'
+    OrderItem:
+      $ref: './schemas/OrderItem.yaml#/OrderItem'
+    OrderStatusHistory:
+      $ref: './schemas/OrderStatusHistory.yaml#/OrderStatusHistory'
+    UserProfile:
+      $ref: './schemas/UserProfile.yaml#/UserProfile'
   responses:
     BadRequest:
       description: Invalid request payload

@@ -24,6 +24,7 @@ import {
   ORDER_UPDATE_ERROR
 } from './order.const';
 import { applyOrderReward } from 'services/rewards/orderReward';
+import { enrichOrderWithUserProfile, enrichOrdersWithUserProfiles } from 'services/identityService';
 
 /**
  * Create Order
@@ -33,10 +34,8 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
   res: Response
 ) => {
   try {
-    console.log(req,"req");
     const paymentStatus = req.body.paymentStatus ?? 'pending';
     const order = await Order.create({
-      // Ensure orderNumber is always set (model may not define a default).
       orderNumber: randomUUID(),
       userId: req.body.userId,
       templeId: req.body.templeId,
@@ -70,32 +69,32 @@ export const createOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
       deliveryType: req.body.deliveryType
     } as any);
 
-    // Create initial OrderStatusHistory
+    const orderJson = order.toJSON ? order.toJSON() : order;
+
     try {
       const initialStatus = req.body.status ?? 'pending';
       await OrderStatusHistory.create({
         id: randomUUID(),
-        orderId: order.id,
+        orderId: orderJson.id,
         status: initialStatus,
         previousStatus: null,
         notes: 'Order created',
         location: null
       } as any);
-      console.log(`Created initial order status history for order ${order.id} with status: ${initialStatus}`);
+      console.log(`Created initial order status history for order ${orderJson.id} with status: ${initialStatus}`);
     } catch (statusHistoryError) {
       console.error('Error creating order status history:', statusHistoryError);
-      // Log error but don't fail the order creation
+      reportError(statusHistoryError);
     }
 
-    sendSuccessResponse(res, 201, ORDER_CREATED_SUCCESS, { order });
+    sendSuccessResponse(res, 201, ORDER_CREATED_SUCCESS, { order: orderJson });
 
-    // Best-effort: apply order reward if already paid and eligible
-    if ((order as any).orderType && paymentStatus === 'paid') {
+    if (orderJson.orderType && paymentStatus === 'paid') {
       applyOrderReward(
-        String(order.userId),
-        String(order.id),
-        String((order as any).orderType),
-        String((order as any).orderNumber)
+        String(orderJson.userId),
+        String(orderJson.id),
+        String(orderJson.orderType),
+        String(orderJson.orderNumber)
       ).catch(reportError);
     }
   } catch (error) {
@@ -119,7 +118,6 @@ export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.JWT> = async 
       return;
     }
 
-    // Fetch OrderItems and OrderStatusHistory
     const [items, statusHistory] = await Promise.all([
       OrderItem.findAll({ where: { orderId }, order: [['createdAt', 'ASC']] }),
       OrderStatusHistory.findAll({
@@ -128,10 +126,17 @@ export const getOrderByIdHandler: EndpointHandler<EndpointAuthType.JWT> = async 
       })
     ]);
 
+    const orderJson = order.toJSON ? order.toJSON() : order;
+    const itemsJson = items.map(item => item.toJSON ? item.toJSON() : item);
+    const statusHistoryJson = statusHistory.map(status => status.toJSON ? status.toJSON() : status);
+
+    const accessToken = req.headers.authorization;
+    const enrichedOrder = await enrichOrderWithUserProfile(orderJson, accessToken);
+
     sendSuccessResponse(res, 200, ORDER_FETCH_SUCCESS, {
-      order,
-      orderItems: items,
-      orderStatusHistory: statusHistory
+      order: enrichedOrder,
+      orderItems: itemsJson,
+      orderStatusHistory: statusHistoryJson
     });
   } catch (error) {
     reportError(error);
@@ -172,12 +177,12 @@ export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.JWT> = async 
       order: [['createdAt', 'DESC']]
     });
 
-    // Fetch OrderItems and OrderStatusHistory for each order (same approach as getOrderByIdHandler and getOrdersByUserIdHandler)
+    const ordersJson = orders.map(order => order.toJSON ? order.toJSON() : order);
+
     const ordersWithDetails = await Promise.all(
-      orders.map(async (order) => {
-        const orderId = String(order.get ? order.get('id') : (order as any).dataValues?.id || order.id);
+      ordersJson.map(async (orderJson) => {
+        const orderId = String(orderJson.id);
         
-        // Fetch OrderItems and OrderStatusHistory for this order
         const [items, statusHistory] = await Promise.all([
           OrderItem.findAll({
             where: { orderId },
@@ -189,16 +194,22 @@ export const getAllOrdersHandler: EndpointHandler<EndpointAuthType.JWT> = async 
           })
         ]);
 
+        const itemsJson = items.map(item => item.toJSON ? item.toJSON() : item);
+        const statusHistoryJson = statusHistory.map(status => status.toJSON ? status.toJSON() : status);
+
         return {
-          ...order.toJSON(),
-          orderItems: items,
-          orderStatusHistory: statusHistory
+          ...orderJson,
+          orderItems: itemsJson,
+          orderStatusHistory: statusHistoryJson
         };
       })
     );
 
+    const accessToken = req.headers.authorization as string;
+    const enrichedOrders = await enrichOrdersWithUserProfiles(ordersWithDetails, accessToken);
+
     sendSuccessResponse(res, 200, ORDER_LIST_SUCCESS, {
-      orders: ordersWithDetails,
+      orders: enrichedOrders,
       pagination: {
         page,
         limit,
@@ -226,74 +237,76 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
       return;
     }
 
-    const oldStatus = order.status;
-    const newStatus = req.body.status ?? order.status;
-    const oldPaymentStatus = order.paymentStatus;
-    const newPaymentStatus = req.body.paymentStatus ?? order.paymentStatus;
-    const newOrderType = req.body.orderType ?? order.orderType;
+    const orderJson = order.toJSON ? order.toJSON() : order;
+    const oldStatus = orderJson.status;
+    const newStatus = req.body.status ?? orderJson.status;
+    const oldPaymentStatus = orderJson.paymentStatus;
+    const newPaymentStatus = req.body.paymentStatus ?? orderJson.paymentStatus;
+    const newOrderType = req.body.orderType ?? orderJson.orderType;
 
     await order.update({
-      userId: req.body.userId ?? order.userId,
-      templeId: req.body.templeId ?? order.templeId,
-      addressId: req.body.addressId ?? (order as any).addressId,
+      userId: req.body.userId ?? orderJson.userId,
+      templeId: req.body.templeId ?? orderJson.templeId,
+      addressId: req.body.addressId ?? orderJson.addressId,
       orderType: newOrderType,
       status: newStatus,
-      scheduledDate: req.body.scheduledDate ?? order.scheduledDate,
-      scheduledTimestamp: req.body.scheduledTimestamp ?? order.scheduledTimestamp,
-      fulfillmentType: req.body.fulfillmentType ?? order.fulfillmentType,
-      subtotal: req.body.subtotal ?? order.subtotal,
-      discountAmount: req.body.discountAmount ?? order.discountAmount,
-      convenienceFee: req.body.convenienceFee ?? order.convenienceFee,
-      taxAmount: req.body.taxAmount ?? order.taxAmount,
-      totalAmount: req.body.totalAmount ?? order.totalAmount,
-      currency: req.body.currency ?? order.currency,
+      scheduledDate: req.body.scheduledDate ?? orderJson.scheduledDate,
+      scheduledTimestamp: req.body.scheduledTimestamp ?? orderJson.scheduledTimestamp,
+      fulfillmentType: req.body.fulfillmentType ?? orderJson.fulfillmentType,
+      subtotal: req.body.subtotal ?? orderJson.subtotal,
+      discountAmount: req.body.discountAmount ?? orderJson.discountAmount,
+      convenienceFee: req.body.convenienceFee ?? orderJson.convenienceFee,
+      taxAmount: req.body.taxAmount ?? orderJson.taxAmount,
+      totalAmount: req.body.totalAmount ?? orderJson.totalAmount,
+      currency: req.body.currency ?? orderJson.currency,
       paymentStatus: newPaymentStatus,
-      paymentMethod: req.body.paymentMethod ?? order.paymentMethod,
-      paymentId: req.body.paymentId ?? order.paymentId,
-      paidAt: req.body.paidAt ?? order.paidAt,
-      trackingNumber: req.body.trackingNumber ?? order.trackingNumber,
-      carrier: req.body.carrier ?? order.carrier,
-      shippedAt: req.body.shippedAt ?? order.shippedAt,
-      deliveredAt: req.body.deliveredAt ?? order.deliveredAt,
-      contactName: req.body.contactName ?? order.contactName,
-      contactPhone: req.body.contactPhone ?? order.contactPhone,
-      contactEmail: req.body.contactEmail ?? order.contactEmail,
-      cancelledAt: req.body.cancelledAt ?? order.cancelledAt,
-      cancellationReason: req.body.cancellationReason ?? order.cancellationReason,
-      refundAmount: req.body.refundAmount ?? order.refundAmount,
-      shippingAddress: req.body.shippingAddress ?? (order as any).shippingAddress,
-      deliveryType: req.body.deliveryType ?? (order as any).deliveryType
+      paymentMethod: req.body.paymentMethod ?? orderJson.paymentMethod,
+      paymentId: req.body.paymentId ?? orderJson.paymentId,
+      paidAt: req.body.paidAt ?? orderJson.paidAt,
+      trackingNumber: req.body.trackingNumber ?? orderJson.trackingNumber,
+      carrier: req.body.carrier ?? orderJson.carrier,
+      shippedAt: req.body.shippedAt ?? orderJson.shippedAt,
+      deliveredAt: req.body.deliveredAt ?? orderJson.deliveredAt,
+      contactName: req.body.contactName ?? orderJson.contactName,
+      contactPhone: req.body.contactPhone ?? orderJson.contactPhone,
+      contactEmail: req.body.contactEmail ?? orderJson.contactEmail,
+      cancelledAt: req.body.cancelledAt ?? orderJson.cancelledAt,
+      cancellationReason: req.body.cancellationReason ?? orderJson.cancellationReason,
+      refundAmount: req.body.refundAmount ?? orderJson.refundAmount,
+      shippingAddress: req.body.shippingAddress ?? orderJson.shippingAddress,
+      deliveryType: req.body.deliveryType ?? orderJson.deliveryType
     } as any);
 
-    // Create OrderStatusHistory if status changed
     if (oldStatus !== newStatus) {
       try {
         await OrderStatusHistory.create({
           id: randomUUID(),
-          orderId: order.id,
+          orderId: orderJson.id,
           status: newStatus,
           previousStatus: oldStatus,
           notes: `Order status updated from ${oldStatus} to ${newStatus}`,
           location: null
         } as any);
-        console.log(`Created order status history for order ${order.id}: ${oldStatus} -> ${newStatus}`);
+        console.log(`Created order status history for order ${orderJson.id}: ${oldStatus} -> ${newStatus}`);
       } catch (statusHistoryError) {
         console.error('Error creating order status history:', statusHistoryError);
-        // Log error but don't fail the order update
+        reportError(statusHistoryError);
       }
     }
 
-    // Best-effort: apply order reward when payment transitions to paid
     if (oldPaymentStatus !== 'paid' && newPaymentStatus === 'paid') {
       applyOrderReward(
-        String(order.userId),
-        String(order.id),
+        String(orderJson.userId),
+        String(orderJson.id),
         String(newOrderType),
-        String((order as any).orderNumber)
+        String(orderJson.orderNumber)
       ).catch(reportError);
     }
 
-    sendSuccessResponse(res, 200, ORDER_UPDATED_SUCCESS, { order });
+    const updatedOrder = await Order.findByPk(req.params.id);
+    const updatedOrderJson = updatedOrder?.toJSON ? updatedOrder.toJSON() : updatedOrder;
+
+    sendSuccessResponse(res, 200, ORDER_UPDATED_SUCCESS, { order: updatedOrderJson });
   } catch (error) {
     reportError(error);
     sendErrorResponse(res, 500, ORDER_UPDATE_ERROR, error);
@@ -345,10 +358,17 @@ export const getOrderDetailsHandler: EndpointHandler<EndpointAuthType.JWT> = asy
       })
     ]);
 
+    const orderJson = order.toJSON ? order.toJSON() : order;
+    const itemsJson = items.map(item => item.toJSON ? item.toJSON() : item);
+    const statusHistoryJson = statusHistory.map(status => status.toJSON ? status.toJSON() : status);
+
+    const accessToken = req.headers.authorization as string;
+    const enrichedOrder = await enrichOrderWithUserProfile(orderJson, accessToken);
+
     sendSuccessResponse(res, 200, ORDER_DETAILS_FETCH_SUCCESS, {
-      order,
-      orderItems: items,
-      orderStatusHistory: statusHistory
+      order: enrichedOrder,
+      orderItems: itemsJson,
+      orderStatusHistory: statusHistoryJson
     });
   } catch (error) {
     reportError(error);
@@ -390,12 +410,13 @@ export const getOrdersByUserIdHandler: EndpointHandler<EndpointAuthType.JWT> = a
       offset,
       order: [['createdAt', 'DESC']]
     });
-    // Fetch OrderItems and OrderStatusHistory for each order (same approach as getOrderByIdHandler)
+
+    const ordersJson = orders.map(order => order.toJSON ? order.toJSON() : order);
+
     const ordersWithDetails = await Promise.all(
-      orders.map(async (order) => {
-        const orderId = String(order.get ? order.get('id') : (order as any).dataValues?.id || order.id);
+      ordersJson.map(async (orderJson) => {
+        const orderId = String(orderJson.id);
         
-        // Fetch OrderItems and OrderStatusHistory for this order
         const [items, statusHistory] = await Promise.all([
           OrderItem.findAll({
             where: { orderId },
@@ -407,29 +428,22 @@ export const getOrdersByUserIdHandler: EndpointHandler<EndpointAuthType.JWT> = a
           })
         ]);
 
-        // Combine OrderItems and OrderStatusHistory into a single array with type key
-        // const orderDetails = [
-        //   ...items.map(item => ({
-        //     type: 'orderItem',
-        //     ...item.toJSON ? item.toJSON() : item
-        //   })),
-        //   ...statusHistory.map(history => ({
-        //     type: 'orderStatusHistory',
-        //     ...history.toJSON ? history.toJSON() : history
-        //   }))
-        // ];
+        const itemsJson = items.map(item => item.toJSON ? item.toJSON() : item);
+        const statusHistoryJson = statusHistory.map(status => status.toJSON ? status.toJSON() : status);
 
         return {
-          ...order.toJSON(),
-          orderItems: items,
-          orderStatusHistory: statusHistory,
-          // orderDetails: orderDetails
+          ...orderJson,
+          orderItems: itemsJson,
+          orderStatusHistory: statusHistoryJson
         };
       })
     );
 
+    const accessToken = req.headers.authorization as string;
+    const enrichedOrders = await enrichOrdersWithUserProfiles(ordersWithDetails, accessToken);
+
     sendSuccessResponse(res, 200, ORDER_LIST_SUCCESS, {
-      orders: ordersWithDetails,
+      orders: enrichedOrders,
       pagination: {
         page,
         limit,

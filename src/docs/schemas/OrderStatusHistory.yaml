@@ -1,0 +1,27 @@
+OrderStatusHistory:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    orderId:
+      type: string
+      format: uuid
+    status:
+      type: string
+      enum: [pending, confirmed, processing, ready, shipped, completed, cancelled, refunded]
+    previousStatus:
+      type: string
+      nullable: true
+    notes:
+      type: string
+      nullable: true
+    location:
+      type: string
+      nullable: true
+    createdAt:
+      type: string
+      format: date-time
+    updatedAt:
+      type: string
+      format: date-time

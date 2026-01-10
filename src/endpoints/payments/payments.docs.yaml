@@ -15,7 +15,7 @@
             $ref: '#/components/schemas/CreatePaymentOrderRequest'
     responses:
       '201':
-        description: Payment order created
+        description: Payment order created successfully
         content:
           application/json:
             schema:
@@ -23,11 +23,38 @@
               properties:
                 message:
                   type: string
+                  example: Payment order created successfully.
                 order:
                   type: object
+                  description: Razorpay order response from Razorpay API
+                  properties:
+                    id:
+                      type: string
+                      example: order_N2s3r31Pa
+                    amount:
+                      type: integer
+                      description: Amount in smallest currency unit (paise)
+                    currency:
+                      type: string
+                      example: INR
+                    receipt:
+                      type: string
+                      nullable: true
+                    notes:
+                      type: object
+                      additionalProperties: true
+                      nullable: true
+                    status:
+                      type: string
+                      example: created
                 record:
                   $ref: '#/components/schemas/PaymentOrder'
+                  description: Persisted PaymentOrder record
+      '400':
+        description: Invalid request - invalid amount, currency, or missing userId
+        $ref: '#/components/responses/BadRequest'
       '502':
+        description: Razorpay API error or authentication failure
         $ref: '#/components/responses/RazorpayError'
 
   get:
@@ -118,6 +145,8 @@
     summary: Verify Razorpay payment signature
     description: >
       Performs server-side HMAC verification after the client posts Razorpay IDs.
+      Stores order data in PaymentOrder metadata and creates the application Order immediately
+      for real-time processing. The order will also be created via webhook as a backup mechanism.
     operationId: verifyPaymentSignature
     tags:
       - Payments
@@ -131,7 +160,7 @@
             $ref: '#/components/schemas/VerifyPaymentRequest'
     responses:
       '200':
-        description: Signature verified
+        description: Payment verified successfully. Order created immediately or will be created via webhook.
         content:
           application/json:
             schema:
@@ -139,67 +168,35 @@
               properties:
                 message:
                   type: string
+                  example: Payment verified and order created successfully.
+                  description: Success message indicating order creation status
                 order:
                   $ref: '#/components/schemas/PaymentOrder'
+                  description: Updated PaymentOrder with verified payment details
                 appOrderId:
                   type: string
                   format: uuid
-                  description: ID of the created application order
-                orderItems:
-                  type: array
-                  description: Array of order items created for the order (if provided)
-                  items:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                        format: uuid
-                      orderId:
-                        type: string
-                        format: uuid
-                      itemType:
-                        type: string
-                      itemId:
-                        type: string
-                        format: uuid
-                      itemName:
-                        type: string
-                      itemDescription:
-                        type: string
-                      itemImageUrl:
-                        type: string
-                      productId:
-                        type: string
-                        format: uuid
-                      pujaId:
-                        type: string
-                        format: uuid
-                      prasadId:
-                        type: string
-                        format: uuid
-                      dharshanId:
-                        type: string
-                        format: uuid
-                      quantity:
-                        type: integer
-                      unitPrice:
-                        type: number
-                      totalPrice:
-                        type: number
-                      itemDetails:
-                        type: object
-                      status:
-                        type: string
-                      createdAt:
-                        type: string
-                        format: date-time
-                      updatedAt:
-                        type: string
-                        format: date-time
+                  nullable: true
+                  description: ID of the created application order (if created immediately)
+                status:
+                  type: string
+                  example: verified
+                  description: Verification status
       '400':
+        description: Invalid request - missing required fields or invalid signature
         $ref: '#/components/responses/BadRequest'
       '404':
+        description: PaymentOrder not found
         $ref: '#/components/responses/NotFound'
+      '409':
+        description: Payment already processed or payment ID mismatch
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '500':
+        description: Server error during verification or order creation
+        $ref: '#/components/responses/ServerError'
 
 /payments/capture:
   post:
@@ -218,7 +215,7 @@
             $ref: '#/components/schemas/CapturePaymentRequest'
     responses:
       '200':
-        description: Payment captured
+        description: Payment captured successfully or already captured
         content:
           application/json:
             schema:
@@ -226,21 +223,59 @@
               properties:
                 message:
                   type: string
+                  example: Payment captured successfully
                 capture:
                   type: object
+                  description: Razorpay capture response
+                  properties:
+                    id:
+                      type: string
+                    amount:
+                      type: integer
+                    currency:
+                      type: string
+                    status:
+                      type: string
+                    captured_at:
+                      type: integer
+                      description: Unix timestamp
                 order:
                   $ref: '#/components/schemas/PaymentOrder'
+                  description: Updated PaymentOrder with captured status
       '400':
+        description: Invalid capture amount or payment not authorized
         $ref: '#/components/responses/BadRequest'
+      '404':
+        description: PaymentOrder not found
+        $ref: '#/components/responses/NotFound'
+      '409':
+        description: Payment already captured
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
       '502':
+        description: Razorpay API error
         $ref: '#/components/responses/RazorpayError'
 
 /payments/webhook/razorpay:
   post:
     summary: Razorpay webhook endpoint
     description: >
-      Receives webhook events from Razorpay. This endpoint does not require authentication
-      as it uses signature verification for security.
+      Receives webhook events from Razorpay for real-time payment status updates.
+      This endpoint does not require authentication as it uses HMAC-SHA256 signature
+      verification using the X-Razorpay-Signature header for security.
+      
+      Supported events:
+      - payment.authorized: Payment has been authorized
+      - payment.captured: Payment has been captured (triggers order creation if not already created)
+      - payment.failed: Payment failed
+      - order.paid: Razorpay order marked as paid (triggers order creation if not already created)
+      - payment.refunded: Payment refunded (if implemented)
+      
+      The webhook handler creates the application Order, OrderItems, OrderStatusHistory,
+      and RudrakshaBooking (for event orders) from the PaymentOrder metadata. This is
+      the primary mechanism for order creation to ensure reliability.
     operationId: razorpayWebhook
     tags:
       - Payments
@@ -252,6 +287,51 @@
           schema:
             type: object
             description: Razorpay webhook payload
+            properties:
+              event:
+                type: string
+                example: payment.captured
+                description: Webhook event type
+              account_id:
+                type: string
+                description: Razorpay account ID
+              contains:
+                type: array
+                items:
+                  type: string
+                description: Types of entities in the payload
+              payload:
+                type: object
+                description: Event payload containing payment/order/refund entity
+                properties:
+                  payment:
+                    type: object
+                    properties:
+                      entity:
+                        type: object
+                        description: Payment entity details
+                  order:
+                    type: object
+                    properties:
+                      entity:
+                        type: object
+                        description: Order entity details
+                  refund:
+                    type: object
+                    properties:
+                      entity:
+                        type: object
+                        description: Refund entity details
+              created_at:
+                type: integer
+                description: Unix timestamp when the event was created
+    parameters:
+      - name: X-Razorpay-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+        description: HMAC-SHA256 signature of the raw request body for verification
     responses:
       '200':
         description: Webhook processed successfully
@@ -262,9 +342,16 @@
               properties:
                 message:
                   type: string
+                  example: Webhook processed successfully
+                event:
+                  type: string
+                  example: payment.captured
+                  description: The event type that was processed
       '400':
+        description: Invalid webhook signature or payload structure
         $ref: '#/components/responses/BadRequest'
       '500':
+        description: Error processing webhook event
         $ref: '#/components/responses/ServerError'
 
 

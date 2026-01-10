@@ -1,0 +1,64 @@
+OrderItem:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    orderId:
+      type: string
+      format: uuid
+    itemType:
+      type: string
+      description: Type of the item (e.g., 'product', 'puja', 'prasad', 'darshan')
+    itemId:
+      type: string
+      format: uuid
+      nullable: true
+    itemName:
+      type: string
+      nullable: true
+    itemDescription:
+      type: string
+      nullable: true
+    itemImageUrl:
+      type: string
+      format: uri
+      nullable: true
+    productId:
+      type: string
+      format: uuid
+      nullable: true
+    pujaId:
+      type: string
+      format: uuid
+      nullable: true
+    prasadId:
+      type: string
+      format: uuid
+      nullable: true
+    dharshanId:
+      type: string
+      format: uuid
+      nullable: true
+    quantity:
+      type: integer
+      nullable: true
+    unitPrice:
+      type: string
+      nullable: true
+    totalPrice:
+      type: string
+      nullable: true
+    itemDetails:
+      type: object
+      additionalProperties: true
+      nullable: true
+    status:
+      type: string
+      nullable: true
+    createdAt:
+      type: string
+      format: date-time
+    updatedAt:
+      type: string
+      format: date-time

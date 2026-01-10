@@ -27,7 +27,7 @@ export const getAllOrdersEndpoint = new Endpoint({
   handler: getAllOrdersHandler,
   authType: EndpointAuthType.JWT,
   validator: {},
-  middleware: [middleware.checkPermission(['AdminAccess'])]
+  middleware: [middleware.checkPermission(['AdminAccess','UserAccess'])]
 });
 
 export const getOrderByIdEndpoint = new Endpoint({

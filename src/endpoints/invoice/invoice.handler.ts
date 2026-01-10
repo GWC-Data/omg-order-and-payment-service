@@ -55,13 +55,8 @@ export const downloadOrderInvoiceHandler: EndpointHandler<EndpointAuthType.JWT> 
       return;
     }
 
-    const order = (orderInstance as any).toJSON
-      ? (orderInstance as any).toJSON()
-      : (orderInstance as any);
+    const order = orderInstance.toJSON ? orderInstance.toJSON() : orderInstance;
 
-    // Access control (only when auth is enforced):
-    // - admin can download any
-    // - normal user must own the order
     if (enforceAuth) {
       if (!isAdmin(req) && String(order.userId) !== userId) {
         sendErrorResponse(res, 403, FORBIDDEN);
@@ -73,7 +68,7 @@ export const downloadOrderInvoiceHandler: EndpointHandler<EndpointAuthType.JWT> 
       where: { orderId },
       order: [['createdAt', 'ASC']]
     });
-    const itemsJson = items.map((i: any) => (i.toJSON ? i.toJSON() : i));
+    const itemsJson = items.map((item: any) => item.toJSON ? item.toJSON() : item);
 
     // 1 invoice per order (stable invoice number derived from orderNumber/id)
     const invoiceNumber = `INV-${String(order.orderNumber ?? order.id ?? orderId)}`;
