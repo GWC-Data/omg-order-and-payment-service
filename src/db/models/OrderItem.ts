@@ -1,7 +1,15 @@
-import { Table, Column, Model, DataType, Index } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, Index, PrimaryKey, Default } from 'sequelize-typescript';
 
 @Table({ tableName: 'OrderItems', timestamps: true })
 export class OrderItem extends Model {
+
+  @PrimaryKey
+  @Default(DataType.UUIDV4)
+  @Column({
+    type: DataType.UUID,
+    allowNull: false
+  })
+  id!: string;
 
   @Index
   @Column({ type: DataType.UUID, allowNull: false })

@@ -8,18 +8,14 @@ import {
 } from 'node-server-engine';
 import { Response } from 'express';
 import { PaymentOrder, PaymentStatus, Order, OrderItem, OrderStatusHistory } from 'db/models';
-import { randomUUID } from 'crypto';
-import { QueryTypes, Transaction } from 'sequelize';
 import {
   getRazorpayClient,
   verifyPaymentSignature,
   verifyWebhookSignature
 } from 'utils';
 import {
-  isValidUUID,
   sanitizeUUID,
-  sanitizeUUIDFields,
-  validateRequiredUUID
+  sanitizeUUIDFields
 } from 'utils/uuidValidator';
 import {
   PAYMENT_CAPTURE_FAILED,
@@ -264,41 +260,12 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       return;
     }
 
-    // Find PaymentOrder - try Sequelize first, then raw query as fallback
-    let order = await PaymentOrder.findOne({
+    const order = await PaymentOrder.findOne({
       where: { razorpayOrderId: body.razorpay_order_id }
     });
 
-    // Fallback: Try raw query in case of column name mismatch
-    if (!order) {
-      try {
-        const { sequelize } = await import('node-server-engine');
-        const dialect = (process.env.SQL_TYPE ?? 'postgres').toLowerCase();
-        
-        let query = '';
-        if (dialect === 'postgres') {
-          query = `SELECT * FROM "PaymentOrders" WHERE "razorpayOrderId" = $1 OR "razorpay_order_id" = $1 LIMIT 1`;
-        } else {
-          query = `SELECT * FROM PaymentOrders WHERE razorpayOrderId = ? OR razorpay_order_id = ? LIMIT 1`;
-        }
-        
-        const [results]: any = await sequelize.getQueryInterface().sequelize.query(query, {
-          replacements: dialect === 'postgres' ? [body.razorpay_order_id] : [body.razorpay_order_id, body.razorpay_order_id],
-          type: QueryTypes.SELECT
-        });
-        
-        if (results && results.length > 0) {
-          order = PaymentOrder.build(results[0]);
-          console.log('[DEBUG] Order found using raw query fallback');
-        }
-      } catch (rawQueryError) {
-        console.error('[DEBUG] Error with raw query fallback:', rawQueryError);
-      }
-    }
-
     if (!order) {
       console.error(`[ERROR] PaymentOrder not found: ${body.razorpay_order_id}`);
-      console.error('[DEBUG] Request body userId:', body.userId);
       res.status(404).json({ 
         message: PAYMENT_ORDER_NOT_FOUND,
         searchedId: body.razorpay_order_id
@@ -415,89 +382,14 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
 
     if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
       try {
-        console.log(`[VERIFY] Creating Order immediately after payment verification for ${body.razorpay_order_id}`);
-        
-        // Validate UUIDs before attempting order creation
-        const sanitizedOrderData = sanitizeUUIDFields(orderData, ['userId', 'templeId', 'addressId']);
-        
-        if (!sanitizedOrderData.userId) {
-          throw new Error(`Invalid userId in orderData: "${orderData.userId}". Must be a valid UUID.`);
-        }
-        
-        // Update orderData with sanitized UUIDs
-        const validatedOrderData = {
-          ...orderData,
-          userId: sanitizedOrderData.userId,
-          templeId: sanitizedOrderData.templeId || null,
-          addressId: sanitizedOrderData.addressId || null,
-        };
-        
-        const createdAppOrder = await createOrderFromPaymentOrderData(updatedOrder, validatedOrderData, req.headers.authorization as string);
+        const createdAppOrder = await createOrderFromPaymentOrderData(updatedOrder, orderData, req.headers.authorization as string);
         if (createdAppOrder && createdAppOrder.id) {
           appOrderId = String(createdAppOrder.id);
-          console.log(`[VERIFY] Successfully created Order ${appOrderId} immediately after payment verification`);
-        } else {
-          // Order creation failed - log detailed error
-          console.error('[VERIFY] Order creation returned null/undefined. Order data:', {
-            userId: validatedOrderData.userId,
-            orderType: validatedOrderData.orderType,
-            templeId: validatedOrderData.templeId,
-            addressId: validatedOrderData.addressId,
-            hasOrderItems: !!validatedOrderData.orderItems,
-            orderItemsCount: validatedOrderData.orderItems?.length || 0
-          });
-          
-          // Store failure in metadata for retry
-          await updatedOrder.update({
-            metadata: {
-              ...updatedMetadata,
-              orderCreationFailed: true,
-              orderCreationError: 'Order creation returned null',
-              orderCreationAttemptedAt: new Date().toISOString()
-            }
-          } as any);
         }
       } catch (orderCreateError) {
         const error = orderCreateError as Error;
         console.error('[VERIFY] Failed to create order immediately:', error.message);
-        console.error('[VERIFY] Error stack:', error.stack);
-        console.error('[VERIFY] Order data that failed:', {
-          userId: orderData.userId,
-          orderType: orderData.orderType,
-          templeId: orderData.templeId,
-          addressId: orderData.addressId,
-        });
-        
-        // Store failure details in metadata for retry
-        await updatedOrder.update({
-          metadata: {
-            ...updatedMetadata,
-            orderCreationFailed: true,
-            orderCreationError: error.message,
-            orderCreationErrorStack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-            orderCreationAttemptedAt: new Date().toISOString()
-          }
-        } as any);
-        
         reportError(orderCreateError);
-        
-        // If it's a UUID validation error, return specific error to client
-        if (error.message.includes('Invalid UUID') || error.message.includes('invalid input syntax for type uuid')) {
-          res.status(400).json({
-            message: 'Order creation failed due to invalid UUID format',
-            error: error.message,
-            details: {
-              userId: orderData.userId,
-              templeId: orderData.templeId,
-              addressId: orderData.addressId,
-              suggestion: 'Please ensure all ID fields are valid UUIDs (e.g., "550e8400-e29b-41d4-a716-446655440000")'
-            }
-          });
-          return;
-        }
-        
-        // For other errors, still return success but note that order will be created via webhook
-        // This maintains backward compatibility but logs the issue
       }
     }
 
@@ -574,54 +466,34 @@ async function createOrderFromPaymentOrderData(
   accessToken?: string
 ): Promise<any | null> {
   try {
-    // Validate required fields
-    if (!orderData.userId) {
-      console.error('[WEBHOOK] userId is required but missing in orderData');
+    if (!orderData.userId || !orderData.orderType) {
+      console.error('[WEBHOOK] userId and orderType are required');
       return null;
     }
 
-    if (!orderData.orderType) {
-      console.error('[WEBHOOK] orderType is required but missing in orderData');
+    const sanitizedUserId = sanitizeUUID(String(orderData.userId));
+    if (!sanitizedUserId) {
+      console.error(`[WEBHOOK] Invalid userId: "${orderData.userId}"`);
       return null;
     }
-
-    // Validate and sanitize UUID fields
-    const sanitizedOrderData = sanitizeUUIDFields(orderData, ['userId', 'templeId', 'addressId']);
-    
-    if (!sanitizedOrderData.userId) {
-      console.error(`[WEBHOOK] Invalid userId format: "${orderData.userId}". Must be a valid UUID.`);
-      return null;
-    }
-    
-    // Update orderData with sanitized UUIDs
-    orderData = {
-      ...orderData,
-      userId: sanitizedOrderData.userId,
-      templeId: sanitizedOrderData.templeId || null,
-      addressId: sanitizedOrderData.addressId || null,
-    };
 
     const paymentOrderJson = paymentOrder.toJSON ? paymentOrder.toJSON() : paymentOrder;
     const metadata = (paymentOrderJson.metadata as Record<string, unknown> | undefined) ?? {};
     const existingAppOrderId = metadata.appOrderId as string | undefined;
 
     if (existingAppOrderId) {
-      console.log(`[WEBHOOK] Order already exists with id ${existingAppOrderId}, skipping creation`);
       const existingOrder = await Order.findByPk(existingAppOrderId);
       if (existingOrder) {
         return existingOrder.toJSON ? existingOrder.toJSON() : existingOrder;
       }
-      return null;
     }
 
-    // Check for duplicate Rudraksha booking if orderType is 'event' and booking data is provided
     if (orderData.orderType === 'event' && orderData.rudrakshaBookingData) {
       const bookingData = orderData.rudrakshaBookingData;
       if (bookingData.preferredDate && bookingData.preferredTimeSlot) {
         try {
           const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
           if (appcontrolUrl) {
-            // Fetch existing bookings for this user
             const bookingsUrl = `${appcontrolUrl}/launch-event/rudraksha-bookings?userId=${encodeURIComponent(bookingData.userId)}`;
             const bookingsRes: any = await request({
               method: 'GET',
@@ -633,20 +505,17 @@ async function createOrderFromPaymentOrderData(
               timeout: 10000
             });
 
-            // Check if any existing booking matches the same date and time slot
             if (bookingsRes?.data?.success && bookingsRes?.data?.data?.bookings) {
               const existingBookings = Array.isArray(bookingsRes.data.data.bookings) 
                 ? bookingsRes.data.data.bookings 
                 : [];
               
-              // Normalize the preferredDate format (remove time if present)
               const normalizedPreferredDate = bookingData.preferredDate?.includes('T')
                 ? bookingData.preferredDate.split('T')[0]
                 : bookingData.preferredDate;
 
               if (normalizedPreferredDate && bookingData.preferredTimeSlot) {
                 const duplicateBooking = existingBookings.find((booking: any) => {
-                  // Handle new object format
                   if (booking.preferredTimeSlot && typeof booking.preferredTimeSlot === 'object' && !Array.isArray(booking.preferredTimeSlot)) {
                     const timeSlots = booking.preferredTimeSlot[normalizedPreferredDate];
                     if (timeSlots) {
@@ -681,76 +550,52 @@ async function createOrderFromPaymentOrderData(
 
                 if (duplicateBooking) {
                   console.warn(`[WEBHOOK] [DUPLICATE_BOOKING] User ${bookingData.userId} already has a booking for date ${normalizedPreferredDate} and time slot ${bookingData.preferredTimeSlot}`);
-                  // For webhook, we don't throw - just log and return null
                   return null;
                 }
               }
             }
           }
         } catch (duplicateCheckError) {
-          // Log error but don't fail - best-effort validation
           console.error('[WEBHOOK] [ERROR] Failed to check for duplicate booking:', duplicateCheckError);
           reportError(duplicateCheckError);
         }
       }
     }
 
-    // Create Order
     let createdOrder: Order | null = null;
     try {
       const paymentOrderJson = paymentOrder.toJSON ? paymentOrder.toJSON() : paymentOrder;
+      const sanitizedTempleId = orderData.templeId ? sanitizeUUID(String(orderData.templeId)) : null;
+      const sanitizedAddressId = orderData.addressId ? sanitizeUUID(String(orderData.addressId)) : null;
 
       const orderDataToCreate: any = {
-        orderNumber: randomUUID(),
-        userId: orderData.userId,
+        userId: sanitizedUserId,
         orderType: orderData.orderType,
         status: orderData.status ?? 'pending',
         paymentStatus: 'paid',
         paymentMethod: 'razorpay',
-        paidAt: new Date()
+        paidAt: new Date(),
+        templeId: sanitizedTempleId,
+        addressId: sanitizedAddressId,
+        scheduledDate: orderData.scheduledDate,
+        scheduledTimestamp: orderData.scheduledTimestamp,
+        fulfillmentType: orderData.fulfillmentType,
+        subtotal: orderData.subtotal !== undefined ? String(orderData.subtotal) : undefined,
+        discountAmount: orderData.discountAmount !== undefined ? String(orderData.discountAmount) : undefined,
+        convenienceFee: orderData.convenienceFee !== undefined ? String(orderData.convenienceFee) : undefined,
+        taxAmount: orderData.taxAmount !== undefined ? String(orderData.taxAmount) : undefined,
+        totalAmount: orderData.totalAmount !== undefined ? String(orderData.totalAmount) : undefined,
+        currency: orderData.currency || paymentOrderJson.currency,
+        contactName: orderData.contactName,
+        contactPhone: orderData.contactPhone,
+        contactEmail: orderData.contactEmail || paymentOrderJson.customerEmail,
+        shippingAddress: orderData.shippingAddress,
+        deliveryType: orderData.deliveryType
       };
 
       if (paymentOrderJson.id) {
         orderDataToCreate.paymentId = paymentOrderJson.id;
       }
-
-      // Validate and sanitize UUID fields before creating order
-      const sanitizedOrderData = sanitizeUUIDFields(orderData, ['userId', 'templeId', 'addressId']);
-      
-      // Validate required userId
-      if (!sanitizedOrderData.userId) {
-        throw new Error(`Invalid userId in orderData: "${orderData.userId}". Must be a valid UUID.`);
-      }
-      
-      orderDataToCreate.userId = sanitizedOrderData.userId;
-      
-      // Only set templeId/addressId if they are valid UUIDs
-      if (sanitizedOrderData.templeId) {
-        orderDataToCreate.templeId = sanitizedOrderData.templeId;
-      }
-      if (sanitizedOrderData.addressId) {
-        orderDataToCreate.addressId = sanitizedOrderData.addressId;
-      }
-      if (orderData.scheduledDate) orderDataToCreate.scheduledDate = orderData.scheduledDate;
-      if (orderData.scheduledTimestamp) orderDataToCreate.scheduledTimestamp = orderData.scheduledTimestamp;
-      if (orderData.fulfillmentType) orderDataToCreate.fulfillmentType = orderData.fulfillmentType;
-      if (orderData.subtotal !== undefined) orderDataToCreate.subtotal = String(orderData.subtotal);
-      if (orderData.discountAmount !== undefined) orderDataToCreate.discountAmount = String(orderData.discountAmount);
-      if (orderData.convenienceFee !== undefined) orderDataToCreate.convenienceFee = String(orderData.convenienceFee);
-      if (orderData.taxAmount !== undefined) orderDataToCreate.taxAmount = String(orderData.taxAmount);
-      if (orderData.totalAmount !== undefined) orderDataToCreate.totalAmount = String(orderData.totalAmount);
-      if (orderData.currency) orderDataToCreate.currency = orderData.currency;
-      else if (paymentOrderJson.currency) orderDataToCreate.currency = paymentOrderJson.currency;
-      if (orderData.contactName) orderDataToCreate.contactName = orderData.contactName;
-      if (orderData.contactPhone) orderDataToCreate.contactPhone = orderData.contactPhone;
-      if (orderData.contactEmail) orderDataToCreate.contactEmail = orderData.contactEmail;
-      else if (paymentOrderJson.customerEmail) orderDataToCreate.contactEmail = paymentOrderJson.customerEmail;
-      if (orderData.shippingAddress) orderDataToCreate.shippingAddress = orderData.shippingAddress;
-      if (orderData.deliveryType) orderDataToCreate.deliveryType = orderData.deliveryType;
-
-      // Explicitly set id (UUID generation)
-      const orderId = randomUUID();
-      orderDataToCreate.id = orderId;
 
       createdOrder = await Order.create(orderDataToCreate);
       
@@ -759,24 +604,18 @@ async function createOrderFromPaymentOrderData(
       }
       
       const createdOrderJson = createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
-      const finalOrderId = String(createdOrderJson.id || orderId);
+      const finalOrderId = String(createdOrderJson.id);
 
-      if (!createdOrderJson.id) {
-        console.warn('[WEBHOOK] [WARN] Order.id was not set by Sequelize, using generated id');
-      }
-
-      const paymentOrderMetadata = paymentOrderJson.metadata as Record<string, unknown> | undefined;
       await paymentOrder.update({
         metadata: {
-          ...paymentOrderMetadata,
+          ...(paymentOrderJson.metadata as Record<string, unknown> | undefined) ?? {},
           appOrderId: finalOrderId
         }
       } as any);
 
       console.log(`[WEBHOOK] [SUCCESS] Created Order ${finalOrderId} for PaymentOrder ${paymentOrderJson.razorpayOrderId}`);
     } catch (orderCreateError) {
-      const error = orderCreateError as Error;
-      console.error('[WEBHOOK] [ERROR] Failed to create Order:', error.message);
+      console.error('[WEBHOOK] [ERROR] Failed to create Order:', (orderCreateError as Error).message);
       reportError(orderCreateError);
       return null;
     }
@@ -785,58 +624,38 @@ async function createOrderFromPaymentOrderData(
       const createdOrderJson = createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
       const orderId = String(createdOrderJson.id);
       
-      if (orderId && orderId !== 'undefined' && orderId !== 'null') {
-        const existingOrderItems = await OrderItem.findAll({
-          where: { orderId }
-        });
+      const existingOrderItems = await OrderItem.findAll({ where: { orderId } });
 
-        if (existingOrderItems.length === 0) {
-          try {
-            console.log(`[WEBHOOK] Creating ${orderData.orderItems.length} OrderItems for order ${orderId}`);
-            
-            await Promise.all(
-              orderData.orderItems.map(async (item: any) => {
-                if (!item.itemType) {
-                  throw new Error(`OrderItem missing required field 'itemType': ${JSON.stringify(item)}`);
-                }
+      if (existingOrderItems.length === 0) {
+        try {
+          await Promise.all(
+            orderData.orderItems.map(async (item: any) => {
+              if (!item.itemType) {
+                throw new Error(`OrderItem missing required field 'itemType': ${JSON.stringify(item)}`);
+              }
 
-                // Sanitize UUID fields in order items
-                const sanitizedItem = sanitizeUUIDFields(item, [
-                  'itemId',
-                  'productId',
-                  'pujaId',
-                  'prasadId',
-                  'dharshanId'
-                ]);
-
-                return await OrderItem.create({
-                  id: randomUUID(),
-                  orderId: orderId,
-                  itemType: item.itemType,
-                  itemId: sanitizedItem.itemId || null,
-                  itemName: item.itemName || null,
-                  itemDescription: item.itemDescription || null,
-                  itemImageUrl: item.itemImageUrl || null,
-                  productId: sanitizedItem.productId || null,
-                  pujaId: sanitizedItem.pujaId || null,
-                  prasadId: sanitizedItem.prasadId || null,
-                  dharshanId: sanitizedItem.dharshanId || null,
-                  quantity: item.quantity || null,
-                  unitPrice: item.unitPrice ? String(item.unitPrice) : null,
-                  totalPrice: item.totalPrice ? String(item.totalPrice) : null,
-                  itemDetails: item.itemDetails || null,
-                  status: item.status || null
-                } as any);
-              })
-            );
-            
-            console.log(`[WEBHOOK] [SUCCESS] Created OrderItems for order ${orderId}`);
-          } catch (orderItemError) {
-            console.error('[WEBHOOK] [ERROR] Failed to create orderItems:', orderItemError);
-            reportError(orderItemError);
-          }
-        } else {
-          console.log(`[WEBHOOK] OrderItems already exist for order ${orderId}, skipping creation`);
+              return await OrderItem.create({
+                orderId: orderId,
+                itemType: item.itemType,
+                itemId: item.itemId ? sanitizeUUID(String(item.itemId)) : null,
+                itemName: item.itemName || null,
+                itemDescription: item.itemDescription || null,
+                itemImageUrl: item.itemImageUrl || null,
+                productId: item.productId ? sanitizeUUID(String(item.productId)) : null,
+                pujaId: item.pujaId ? sanitizeUUID(String(item.pujaId)) : null,
+                prasadId: item.prasadId ? sanitizeUUID(String(item.prasadId)) : null,
+                dharshanId: item.dharshanId ? sanitizeUUID(String(item.dharshanId)) : null,
+                quantity: item.quantity || null,
+                unitPrice: item.unitPrice ? String(item.unitPrice) : null,
+                totalPrice: item.totalPrice ? String(item.totalPrice) : null,
+                itemDetails: item.itemDetails || null,
+                status: item.status || null
+              } as any);
+            })
+          );
+        } catch (orderItemError) {
+          console.error('[WEBHOOK] [ERROR] Failed to create orderItems:', orderItemError);
+          reportError(orderItemError);
         }
       }
     }
@@ -845,22 +664,17 @@ async function createOrderFromPaymentOrderData(
       const createdOrderJson = createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
       const orderId = String(createdOrderJson.id);
 
-      const existingStatusHistory = await OrderStatusHistory.findOne({
-        where: { orderId }
-      });
+      const existingStatusHistory = await OrderStatusHistory.findOne({ where: { orderId } });
 
       if (!existingStatusHistory) {
         try {
-          const initialStatus = orderData.status ?? 'pending';
           await OrderStatusHistory.create({
-            id: randomUUID(),
             orderId: orderId,
-            status: initialStatus,
+            status: orderData.status ?? 'pending',
             previousStatus: null,
             notes: 'Order created via Razorpay webhook',
             location: null
           } as any);
-          console.log(`[WEBHOOK] Created initial order status history for order ${orderId}`);
         } catch (statusHistoryError) {
           console.error('[WEBHOOK] [ERROR] Failed to create order status history:', statusHistoryError);
           reportError(statusHistoryError);

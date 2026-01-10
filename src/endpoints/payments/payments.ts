@@ -67,7 +67,7 @@ export const capturePaymentEndpoint = new Endpoint({
 });
 
 export const razorpayWebhookEndpoint = new Endpoint({
-  path: '/webhook-razorpay-payments',
+  path: '/payments/webhook/razorpay',
   method: EndpointMethod.POST,
   handler: razorpayWebhookHandler,
   authType: EndpointAuthType.NONE,
