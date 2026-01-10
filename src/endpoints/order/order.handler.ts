@@ -231,7 +231,8 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
   res: Response
 ) => {
   try {
-    const order = await Order.findByPk(req.params.id);
+    const orderId = String(req.params.id);
+    const order = await Order.findByPk(orderId);
     if (!order) {
       sendErrorResponse(res, 404, ORDER_NOT_FOUND);
       return;
@@ -303,7 +304,7 @@ export const updateOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
       ).catch(reportError);
     }
 
-    const updatedOrder = await Order.findByPk(req.params.id);
+    const updatedOrder = await Order.findByPk(orderId);
     const updatedOrderJson = updatedOrder?.toJSON ? updatedOrder.toJSON() : updatedOrder;
 
     sendSuccessResponse(res, 200, ORDER_UPDATED_SUCCESS, { order: updatedOrderJson });
@@ -321,7 +322,8 @@ export const deleteOrderHandler: EndpointHandler<EndpointAuthType.JWT> = async (
   res: Response
 ) => {
   try {
-    const order = await Order.findByPk(req.params.id);
+    const orderId = String(req.params.id);
+    const order = await Order.findByPk(orderId);
     if (!order) {
       sendErrorResponse(res, 404, ORDER_NOT_FOUND);
       return;
