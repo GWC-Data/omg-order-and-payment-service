@@ -1,4 +1,4 @@
-import { QueryInterface, DataTypes } from 'sequelize';
+import { QueryInterface, DataTypes, QueryTypes } from 'sequelize';
 
 /**
  * Migration to fix invalid UUID values in Orders and related tables
@@ -24,65 +24,94 @@ export async function up(queryInterface: QueryInterface): Promise<void> {
 
     if (dialect === 'postgres') {
       // PostgreSQL: Fix invalid UUIDs in Orders table
+      // Note: If columns are UUID type, invalid data might not be storable
+      // So we'll use a safer approach with exception handling
       
       // 1. Fix templeId - set invalid UUIDs to NULL (it's nullable)
+      // Note: PostgreSQL UUID columns won't store invalid UUIDs in the first place
+      // But if somehow invalid data exists, we'll clean it up
+      // Using CAST() for better compatibility
       console.log('[MIGRATION] Fixing invalid templeId values...');
-      await queryInterface.sequelize.query(`
-        UPDATE "Orders"
-        SET "templeId" = NULL
-        WHERE "templeId" IS NOT NULL
-        AND (
-          "templeId" ~ '^[0-9]+$'  -- Numeric strings
-          OR LENGTH("templeId") < 36  -- Too short to be UUID
-          OR "templeId" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'  -- Invalid UUID format
-        );
-      `);
+      try {
+        await queryInterface.sequelize.query(`
+          UPDATE "Orders"
+          SET "templeId" = NULL
+          WHERE "templeId" IS NOT NULL
+          AND (
+            CAST("templeId" AS TEXT) ~ '^[0-9]+$'
+            OR LENGTH(CAST("templeId" AS TEXT)) < 36
+            OR CAST("templeId" AS TEXT) !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          );
+        `);
+        console.log('[MIGRATION] templeId cleanup completed');
+      } catch (error: any) {
+        console.warn('[MIGRATION] Error fixing templeId (this is expected if column is strict UUID type):', error.message);
+        // If column is strict UUID type, invalid data can't exist, so skip
+      }
 
       // 2. Fix addressId - set invalid UUIDs to NULL (it's nullable)
       console.log('[MIGRATION] Fixing invalid addressId values...');
-      await queryInterface.sequelize.query(`
-        UPDATE "Orders"
-        SET "addressId" = NULL
-        WHERE "addressId" IS NOT NULL
-        AND (
-          "addressId" ~ '^[0-9]+$'  -- Numeric strings
-          OR LENGTH("addressId") < 36  -- Too short to be UUID
-          OR "addressId" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'  -- Invalid UUID format
-        );
-      `);
+      try {
+        await queryInterface.sequelize.query(`
+          UPDATE "Orders"
+          SET "addressId" = NULL
+          WHERE "addressId" IS NOT NULL
+          AND (
+            CAST("addressId" AS TEXT) ~ '^[0-9]+$'
+            OR LENGTH(CAST("addressId" AS TEXT)) < 36
+            OR CAST("addressId" AS TEXT) !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          );
+        `);
+        console.log('[MIGRATION] addressId cleanup completed');
+      } catch (error: any) {
+        console.warn('[MIGRATION] Error fixing addressId (this is expected if column is strict UUID type):', error.message);
+      }
 
       // 3. Fix paymentId - set invalid UUIDs to NULL (it's nullable)
       console.log('[MIGRATION] Fixing invalid paymentId values...');
-      await queryInterface.sequelize.query(`
-        UPDATE "Orders"
-        SET "paymentId" = NULL
-        WHERE "paymentId" IS NOT NULL
-        AND (
-          "paymentId" ~ '^[0-9]+$'  -- Numeric strings
-          OR LENGTH("paymentId") < 36  -- Too short to be UUID
-          OR "paymentId" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'  -- Invalid UUID format
-        );
-      `);
+      try {
+        await queryInterface.sequelize.query(`
+          UPDATE "Orders"
+          SET "paymentId" = NULL
+          WHERE "paymentId" IS NOT NULL
+          AND (
+            CAST("paymentId" AS TEXT) ~ '^[0-9]+$'
+            OR LENGTH(CAST("paymentId" AS TEXT)) < 36
+            OR CAST("paymentId" AS TEXT) !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          );
+        `);
+        console.log('[MIGRATION] paymentId cleanup completed');
+      } catch (error: any) {
+        console.warn('[MIGRATION] Error fixing paymentId (this is expected if column is strict UUID type):', error.message);
+      }
 
-      // 4. Fix userId - this is required, so we need to handle it carefully
-      // Check if there are any invalid userIds
-      const invalidUserIds = await queryInterface.sequelize.query(`
-        SELECT id, "userId", "orderNumber"
-        FROM "Orders"
-        WHERE "userId" IS NOT NULL
-        AND (
-          "userId" ~ '^[0-9]+$'  -- Numeric strings
-          OR LENGTH("userId") < 36  -- Too short to be UUID
-          OR "userId" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'  -- Invalid UUID format
-        )
-        LIMIT 100;
-      `, { type: QueryInterface.QueryTypes.SELECT });
+      // 4. Check userId - this is required, so we need to handle it carefully
+      // Note: If userId column is UUID type, invalid values can't exist
+      // But we'll check anyway and log any issues
+      console.log('[MIGRATION] Checking userId values...');
+      try {
+        const invalidUserIds = await queryInterface.sequelize.query(`
+          SELECT id, CAST("userId" AS TEXT) as "userId", "orderNumber"
+          FROM "Orders"
+          WHERE "userId" IS NOT NULL
+          AND (
+            CAST("userId" AS TEXT) ~ '^[0-9]+$'
+            OR LENGTH(CAST("userId" AS TEXT)) < 36
+            OR CAST("userId" AS TEXT) !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          )
+          LIMIT 100;
+        `, { type: QueryTypes.SELECT });
 
-      if (Array.isArray(invalidUserIds) && invalidUserIds.length > 0) {
-        console.warn(`[MIGRATION] Found ${invalidUserIds.length} orders with invalid userId. These need manual review.`);
-        console.warn('[MIGRATION] Invalid userId orders:', invalidUserIds);
-        // For now, we'll log them but not auto-fix since userId is required
-        // These should be reviewed and fixed manually
+        if (Array.isArray(invalidUserIds) && invalidUserIds.length > 0) {
+          console.warn(`[MIGRATION] Found ${invalidUserIds.length} orders with invalid userId. These need manual review.`);
+          console.warn('[MIGRATION] Invalid userId orders:', invalidUserIds);
+          // For now, we'll log them but not auto-fix since userId is required
+          // These should be reviewed and fixed manually
+        } else {
+          console.log('[MIGRATION] All userId values appear to be valid UUIDs');
+        }
+      } catch (error: any) {
+        console.warn('[MIGRATION] Error checking userId (this is expected if column is strict UUID type):', error.message);
       }
 
       // 5. Fix OrderItems table UUID fields
@@ -92,16 +121,21 @@ export async function up(queryInterface: QueryInterface): Promise<void> {
         const uuidFields = ['itemId', 'productId', 'pujaId', 'prasadId', 'dharshanId'];
         
         for (const field of uuidFields) {
-          await queryInterface.sequelize.query(`
-            UPDATE "OrderItems"
-            SET "${field}" = NULL
-            WHERE "${field}" IS NOT NULL
-            AND (
-              "${field}" ~ '^[0-9]+$'  -- Numeric strings
-              OR LENGTH("${field}") < 36  -- Too short to be UUID
-              OR "${field}" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'  -- Invalid UUID format
-            );
-          `);
+          try {
+            await queryInterface.sequelize.query(`
+              UPDATE "OrderItems"
+              SET "${field}" = NULL
+              WHERE "${field}" IS NOT NULL
+              AND (
+                CAST("${field}" AS TEXT) ~ '^[0-9]+$'
+                OR LENGTH(CAST("${field}" AS TEXT)) < 36
+                OR CAST("${field}" AS TEXT) !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              );
+            `);
+            console.log(`[MIGRATION] ${field} cleanup completed in OrderItems`);
+          } catch (error: any) {
+            console.warn(`[MIGRATION] Error fixing ${field} in OrderItems (this is expected if column is strict UUID type):`, error.message);
+          }
         }
       }
 
@@ -114,26 +148,38 @@ export async function up(queryInterface: QueryInterface): Promise<void> {
         FROM information_schema.columns
         WHERE table_name = 'Orders'
         AND column_name IN ('id', 'orderNumber');
-      `, { type: QueryInterface.QueryTypes.SELECT });
+      `, { type: QueryTypes.SELECT });
 
       // Set default for id if not set
       const idDefault = (orderDefaults as any[])?.find((col: any) => col.column_name === 'id');
-      if (!idDefault?.column_default || !idDefault.column_default.includes('uuid_generate')) {
-        await queryInterface.sequelize.query(`
-          ALTER TABLE "Orders"
-          ALTER COLUMN "id" SET DEFAULT gen_random_uuid();
-        `);
-        console.log('[MIGRATION] Set default UUID generation for Orders.id');
+      if (!idDefault?.column_default || (!idDefault.column_default.includes('uuid_generate') && !idDefault.column_default.includes('gen_random_uuid'))) {
+        try {
+          await queryInterface.sequelize.query(`
+            ALTER TABLE "Orders"
+            ALTER COLUMN "id" SET DEFAULT gen_random_uuid();
+          `);
+          console.log('[MIGRATION] Set default UUID generation for Orders.id');
+        } catch (error: any) {
+          console.warn('[MIGRATION] Error setting default for id:', error.message);
+        }
+      } else {
+        console.log('[MIGRATION] Orders.id already has UUID default');
       }
 
       // Set default for orderNumber if not set
       const orderNumberDefault = (orderDefaults as any[])?.find((col: any) => col.column_name === 'orderNumber');
-      if (!orderNumberDefault?.column_default || !orderNumberDefault.column_default.includes('uuid_generate')) {
-        await queryInterface.sequelize.query(`
-          ALTER TABLE "Orders"
-          ALTER COLUMN "orderNumber" SET DEFAULT gen_random_uuid();
-        `);
-        console.log('[MIGRATION] Set default UUID generation for Orders.orderNumber');
+      if (!orderNumberDefault?.column_default || (!orderNumberDefault.column_default.includes('uuid_generate') && !orderNumberDefault.column_default.includes('gen_random_uuid'))) {
+        try {
+          await queryInterface.sequelize.query(`
+            ALTER TABLE "Orders"
+            ALTER COLUMN "orderNumber" SET DEFAULT gen_random_uuid();
+          `);
+          console.log('[MIGRATION] Set default UUID generation for Orders.orderNumber');
+        } catch (error: any) {
+          console.warn('[MIGRATION] Error setting default for orderNumber:', error.message);
+        }
+      } else {
+        console.log('[MIGRATION] Orders.orderNumber already has UUID default');
       }
 
     } else if (dialect === 'mysql') {

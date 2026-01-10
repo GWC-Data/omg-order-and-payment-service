@@ -69,8 +69,7 @@ export const verifyPaymentValidator: Schema = {
     in: 'body',
     exists: { errorMessage: 'User ID is required' },
     isUUID: { 
-      errorMessage: 'User ID must be a valid UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000"). Numeric IDs like "1" or "2" are not allowed.',
-      options: { version: '4' }
+      errorMessage: 'User ID must be a valid UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000"). Numeric IDs like "1" or "2" are not allowed.'
     },
     custom: {
       options: (value: unknown) => {
@@ -88,8 +87,7 @@ export const verifyPaymentValidator: Schema = {
     optional: true,
     // exists: { errorMessage: 'Temple ID is required' },
     isUUID: { 
-      errorMessage: 'Temple ID must be a valid UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000"). Numeric IDs like "1" or "2" are not allowed.',
-      options: { version: '4' } // Ensure UUID v4 format
+      errorMessage: 'Temple ID must be a valid UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000"). Numeric IDs like "1" or "2" are not allowed.'
     },
     custom: {
       options: (value: unknown) => {
@@ -117,8 +115,7 @@ export const verifyPaymentValidator: Schema = {
     in: 'body', 
     optional: true, 
     isUUID: { 
-      errorMessage: 'Address ID must be a valid UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000"). Numeric IDs like "1" or "2" are not allowed.',
-      options: { version: '4' }
+      errorMessage: 'Address ID must be a valid UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000"). Numeric IDs like "1" or "2" are not allowed.'
     },
     custom: {
       options: (value: unknown) => {

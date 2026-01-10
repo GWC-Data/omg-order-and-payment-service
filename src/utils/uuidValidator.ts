@@ -61,7 +61,7 @@ export function sanitizeUUIDFields<T extends Record<string, any>>(
   fields: T,
   uuidFieldNames: string[]
 ): T {
-  const sanitized = { ...fields };
+  const sanitized = { ...fields } as any;
 
   for (const fieldName of uuidFieldNames) {
     if (fieldName in sanitized) {
@@ -78,7 +78,7 @@ export function sanitizeUUIDFields<T extends Record<string, any>>(
     }
   }
 
-  return sanitized;
+  return sanitized as T;
 }
 
 /**
