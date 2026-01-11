@@ -1037,21 +1037,31 @@ export const razorpayWebhookHandler: EndpointHandler<
 
     const rawBody = (req as any).rawBody || JSON.stringify(req.body);
 
-    if (!signature) {
-      console.warn('[WEBHOOK] Missing X-Razorpay-Signature header - webhook not configured with secret in Razorpay dashboard');
-      console.warn('[WEBHOOK] Configure webhook secret in Razorpay Dashboard → Settings → Webhooks');
-      console.warn('[WEBHOOK] Set RAZORPAY_WEBHOOK_SECRET environment variable');
-      res.status(400).json({ 
-        message: WEBHOOK_SIGNATURE_INVALID,
-        error: 'Webhook signature header missing. Configure webhook secret in Razorpay dashboard.'
-      });
-      return;
-    }
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    
+    if (webhookSecret) {
+      if (!signature) {
+        console.warn('[WEBHOOK] RAZORPAY_WEBHOOK_SECRET is configured but signature header is missing');
+        console.warn('[WEBHOOK] This may indicate webhook is not properly configured in Razorpay dashboard');
+        res.status(400).json({ 
+          message: WEBHOOK_SIGNATURE_INVALID,
+          error: 'Webhook signature header missing. Configure webhook secret in Razorpay dashboard.'
+        });
+        return;
+      }
 
-    if (!verifyWebhookSignature(rawBody, signature)) {
-      console.error('[WEBHOOK] Invalid webhook signature');
-      res.status(400).json({ message: WEBHOOK_SIGNATURE_INVALID });
-      return;
+      if (!verifyWebhookSignature(rawBody, signature)) {
+        console.error('[WEBHOOK] Invalid webhook signature');
+        res.status(400).json({ message: WEBHOOK_SIGNATURE_INVALID });
+        return;
+      }
+    } else {
+      if (!signature) {
+        console.warn('[WEBHOOK] No webhook secret configured - processing webhook without signature verification');
+        console.warn('[WEBHOOK] WARNING: This is insecure. Configure RAZORPAY_WEBHOOK_SECRET for production.');
+      } else {
+        console.warn('[WEBHOOK] Signature header present but RAZORPAY_WEBHOOK_SECRET not configured - skipping verification');
+      }
     }
 
     const payload = req.body as RazorpayWebhookPayload;

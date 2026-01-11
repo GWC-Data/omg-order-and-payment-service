@@ -91,9 +91,16 @@ export function verifyPaymentSignature(
 
 export function verifyWebhookSignature(payload: string, signature: string): boolean {
   try {
-    const { keySecret } = getRazorpaySecrets();
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    
+    if (!webhookSecret) {
+      console.warn('[WEBHOOK] RAZORPAY_WEBHOOK_SECRET not configured - skipping signature verification');
+      console.warn('[WEBHOOK] WARNING: Webhook verification disabled. Configure secret for production security.');
+      return true;
+    }
+
     const expectedSignature = crypto
-      .createHmac('sha256', keySecret)
+      .createHmac('sha256', webhookSecret)
       .update(payload, 'utf8')
       .digest('hex');
 
