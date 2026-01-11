@@ -264,12 +264,6 @@ export const listPaymentOrdersValidator: Schema = {
   }
 };
 
-export const razorpayWebhookValidator: Schema = {
-  'X-Razorpay-Signature': {
-    in: 'headers',
-    exists: { errorMessage: 'Razorpay signature header is required' },
-    isString: true
-  }
-};
+export const razorpayWebhookValidator: Schema = {};
 
 

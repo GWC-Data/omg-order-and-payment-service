@@ -477,6 +477,17 @@ async function createOrderFromPaymentOrderData(
       return null;
     }
 
+    if (orderData.orderItems && Array.isArray(orderData.orderItems)) {
+      orderData.orderItems = orderData.orderItems.map((item: any) => ({
+        ...item,
+        itemId: item.itemId ? sanitizeUUID(String(item.itemId)) : null,
+        productId: item.productId ? sanitizeUUID(String(item.productId)) : null,
+        pujaId: item.pujaId ? sanitizeUUID(String(item.pujaId)) : null,
+        prasadId: item.prasadId ? sanitizeUUID(String(item.prasadId)) : null,
+        dharshanId: item.dharshanId ? sanitizeUUID(String(item.dharshanId)) : null,
+      }));
+    }
+
     const paymentOrderJson = paymentOrder.toJSON ? paymentOrder.toJSON() : paymentOrder;
     const metadata = (paymentOrderJson.metadata as Record<string, unknown> | undefined) ?? {};
     const existingAppOrderId = metadata.appOrderId as string | undefined;
@@ -1002,7 +1013,7 @@ export const razorpayWebhookHandler: EndpointHandler<
   res: Response
 ) => {
   try {
-    const signature = req.headers['x-razorpay-signature'] as string;
+    const signature = (req.headers['x-razorpay-signature'] || req.headers['X-Razorpay-Signature']) as string;
     const rawBody = (req as any).rawBody || JSON.stringify(req.body);
 
     if (!signature) {
