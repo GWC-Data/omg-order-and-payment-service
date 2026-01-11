@@ -574,12 +574,13 @@ async function createOrderFromPaymentOrderData(
     }
 
     let createdOrder: Order | null = null;
+    let orderDataToCreate: any = {};
     try {
       const paymentOrderJson = paymentOrder.toJSON ? paymentOrder.toJSON() : paymentOrder;
       const sanitizedTempleId = orderData.templeId ? sanitizeUUID(String(orderData.templeId)) : null;
       const sanitizedAddressId = orderData.addressId ? sanitizeUUID(String(orderData.addressId)) : null;
 
-      const orderDataToCreate: any = {
+      orderDataToCreate = {
         userId: sanitizedUserId,
         orderType: orderData.orderType,
         status: orderData.status ?? 'pending',
@@ -605,7 +606,10 @@ async function createOrderFromPaymentOrderData(
       };
 
       if (paymentOrderJson.id) {
-        orderDataToCreate.paymentId = paymentOrderJson.id;
+        const sanitizedPaymentId = sanitizeUUID(String(paymentOrderJson.id));
+        if (sanitizedPaymentId) {
+          orderDataToCreate.paymentId = sanitizedPaymentId;
+        }
       }
 
       createdOrder = await Order.create(orderDataToCreate);
@@ -626,7 +630,17 @@ async function createOrderFromPaymentOrderData(
 
       console.log(`[WEBHOOK] [SUCCESS] Created Order ${finalOrderId} for PaymentOrder ${paymentOrderJson.razorpayOrderId}`);
     } catch (orderCreateError) {
-      console.error('[WEBHOOK] [ERROR] Failed to create Order:', (orderCreateError as Error).message);
+      const error = orderCreateError as Error;
+      console.error('[WEBHOOK] [ERROR] Failed to create Order:', error.message);
+      console.error('[WEBHOOK] [ERROR] Order creation data (UUID fields):', {
+        userId: orderDataToCreate.userId,
+        templeId: orderDataToCreate.templeId,
+        addressId: orderDataToCreate.addressId,
+        paymentId: orderDataToCreate.paymentId,
+        originalUserId: orderData.userId,
+        originalTempleId: orderData.templeId,
+        originalAddressId: orderData.addressId,
+      });
       reportError(orderCreateError);
       return null;
     }
@@ -1026,10 +1040,13 @@ export const razorpayWebhookHandler: EndpointHandler<
     const rawBody = (req as any).rawBody || JSON.stringify(req.body);
 
     if (!signature) {
-      console.error('[WEBHOOK] Missing X-Razorpay-Signature header');
-      console.error('[WEBHOOK] Available headers:', Object.keys(req.headers));
-      console.error('[WEBHOOK] All headers:', JSON.stringify(req.headers, null, 2));
-      res.status(400).json({ message: WEBHOOK_SIGNATURE_INVALID });
+      console.warn('[WEBHOOK] Missing X-Razorpay-Signature header - webhook not configured with secret in Razorpay dashboard');
+      console.warn('[WEBHOOK] Configure webhook secret in Razorpay Dashboard → Settings → Webhooks');
+      console.warn('[WEBHOOK] Set RAZORPAY_WEBHOOK_SECRET environment variable');
+      res.status(400).json({ 
+        message: WEBHOOK_SIGNATURE_INVALID,
+        error: 'Webhook signature header missing. Configure webhook secret in Razorpay dashboard.'
+      });
       return;
     }
 
