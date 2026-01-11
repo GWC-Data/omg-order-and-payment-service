@@ -906,7 +906,9 @@ async function handlePaymentCaptured(paymentEntity: RazorpayPaymentEntity): Prom
 
     console.log(`[WEBHOOK] Payment ${paymentEntity.id} captured for order ${paymentEntity.order_id}`);
 
-    if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
+    if (existingAppOrderId) {
+      console.log(`[WEBHOOK] Order already exists (${existingAppOrderId}), skipping creation`);
+    } else if (orderData && orderData.userId && orderData.orderType) {
       try {
         console.log(`[WEBHOOK] Creating Order from webhook for payment ${paymentEntity.id}`);
         const refreshedOrder = await PaymentOrder.findOne({
@@ -920,10 +922,10 @@ async function handlePaymentCaptured(paymentEntity: RazorpayPaymentEntity): Prom
         console.error('[WEBHOOK] Failed to create order from webhook:', orderCreateError);
         reportError(orderCreateError);
       }
-    } else if (existingAppOrderId) {
-      console.log(`[WEBHOOK] Order already exists (${existingAppOrderId}), skipping creation`);
     } else {
-      console.log('[WEBHOOK] Order data not found in metadata, skipping order creation');
+      console.log(`[WEBHOOK] Order data not found in PaymentOrder metadata for ${paymentEntity.order_id}`);
+      console.log(`[WEBHOOK] Order will be created when /payments/verify API is called by Flutter app`);
+      console.log(`[WEBHOOK] This is normal - verify API creates orders immediately (primary flow), webhooks are backup`);
     }
   } catch (error) {
     console.error('[WEBHOOK] Error handling payment captured event:', error);
@@ -993,7 +995,9 @@ async function handleOrderPaid(orderEntity: RazorpayOrderEntity): Promise<void> 
 
     console.log(`[WEBHOOK] Order ${orderEntity.id} marked as paid`);
 
-    if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
+    if (existingAppOrderId) {
+      console.log(`[WEBHOOK] Order already exists (${existingAppOrderId}), skipping creation`);
+    } else if (orderData && orderData.userId && orderData.orderType) {
       try {
         console.log(`[WEBHOOK] Creating Order from webhook for Razorpay order ${orderEntity.id}`);
         const refreshedOrder = await PaymentOrder.findOne({
@@ -1007,10 +1011,10 @@ async function handleOrderPaid(orderEntity: RazorpayOrderEntity): Promise<void> 
         console.error('[WEBHOOK] Failed to create order from webhook:', orderCreateError);
         reportError(orderCreateError);
       }
-    } else if (existingAppOrderId) {
-      console.log(`[WEBHOOK] Order already exists (${existingAppOrderId}), skipping creation`);
     } else {
-      console.log('[WEBHOOK] Order data not found in metadata, skipping order creation');
+      console.log(`[WEBHOOK] Order data not found in PaymentOrder metadata for ${orderEntity.id}`);
+      console.log(`[WEBHOOK] Order will be created when /payments/verify API is called by Flutter app`);
+      console.log(`[WEBHOOK] This is normal - verify API creates orders immediately (primary flow), webhooks are backup`);
     }
   } catch (error) {
     console.error('[WEBHOOK] Error handling order paid event:', error);
