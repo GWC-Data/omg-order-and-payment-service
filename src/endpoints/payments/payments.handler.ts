@@ -1013,11 +1013,22 @@ export const razorpayWebhookHandler: EndpointHandler<
   res: Response
 ) => {
   try {
-    const signature = (req.headers['x-razorpay-signature'] || req.headers['X-Razorpay-Signature']) as string;
+    const signatureHeader = req.headers['x-razorpay-signature'] || 
+                           req.headers['X-Razorpay-Signature'] ||
+                           (req.headers as any)['x-razorpay-signature'];
+    
+    const signature = typeof signatureHeader === 'string' 
+      ? signatureHeader 
+      : Array.isArray(signatureHeader) 
+        ? signatureHeader[0] 
+        : null;
+
     const rawBody = (req as any).rawBody || JSON.stringify(req.body);
 
     if (!signature) {
       console.error('[WEBHOOK] Missing X-Razorpay-Signature header');
+      console.error('[WEBHOOK] Available headers:', Object.keys(req.headers));
+      console.error('[WEBHOOK] All headers:', JSON.stringify(req.headers, null, 2));
       res.status(400).json({ message: WEBHOOK_SIGNATURE_INVALID });
       return;
     }
