@@ -274,6 +274,8 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     }
 
     const orderJson = order.toJSON ? order.toJSON() : order;
+    const metadata = (orderJson.metadata as Record<string, unknown> | undefined) ?? {};
+    const existingAppOrderId = metadata.appOrderId as string | undefined;
 
     if (
       orderJson.razorpayPaymentId &&
@@ -284,19 +286,6 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       return;
     }
 
-    if (orderJson.status === 'paid' || orderJson.status === 'captured') {
-      console.warn(`Order ${body.razorpay_order_id} already processed with status: ${orderJson.status}`);
-      const existingAppOrderId = ((orderJson.metadata as any) || {})?.appOrderId as string | undefined;
-      res.status(200).json({
-        message: 'Payment already verified',
-        order: orderJson,
-        appOrderId: existingAppOrderId
-      });
-      return;
-    }
-
-    const metadata = (orderJson.metadata as Record<string, unknown> | undefined) ?? {};
-    
     if (!body.userId) {
       console.error('[ERROR] userId is required but missing in request body');
       res.status(400).json({ 
@@ -315,10 +304,8 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       return;
     }
 
-    // Validate and sanitize UUID fields
     const sanitizedBody = sanitizeUUIDFields(body, ['userId', 'templeId', 'addressId']);
     
-    // Validate required userId UUID
     if (!sanitizedBody.userId) {
       console.error('[ERROR] userId is required and must be a valid UUID');
       res.status(400).json({ 
@@ -331,8 +318,8 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     const orderDataToStore = {
       userId: sanitizedBody.userId,
       orderType: body.orderType,
-      templeId: sanitizedBody.templeId || null, // Set to null if invalid UUID
-      addressId: sanitizedBody.addressId || null, // Set to null if invalid UUID
+      templeId: sanitizedBody.templeId || null,
+      addressId: sanitizedBody.addressId || null,
       status: body.status ?? 'pending',
       scheduledDate: body.scheduledDate,
       scheduledTimestamp: body.scheduledTimestamp,
@@ -352,10 +339,22 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
       rudrakshaBookingData: body.rudrakshaBookingData
     };
 
+    const isAlreadyProcessed = orderJson.status === 'paid' || orderJson.status === 'captured';
+
+    if (isAlreadyProcessed && existingAppOrderId) {
+      console.log(`[VERIFY] PaymentOrder ${body.razorpay_order_id} already processed and Order ${existingAppOrderId} already exists`);
+      res.status(200).json({
+        message: 'Payment already verified and order already exists',
+        order: orderJson,
+        appOrderId: existingAppOrderId
+      });
+      return;
+    }
+
     await order.update({
       razorpayPaymentId: body.razorpay_payment_id,
       razorpaySignature: body.razorpay_signature,
-      status: 'paid' as PaymentStatus,
+      status: isAlreadyProcessed ? orderJson.status : ('paid' as PaymentStatus),
       metadata: {
         ...metadata,
         orderData: orderDataToStore,
@@ -376,21 +375,24 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     const updatedOrderJson = updatedOrder.toJSON ? updatedOrder.toJSON() : updatedOrder;
     const updatedMetadata = (updatedOrderJson.metadata as Record<string, unknown> | undefined) ?? {};
     const orderData = updatedMetadata.orderData as any;
-    const existingAppOrderId = updatedMetadata.appOrderId as string | undefined;
+    const currentAppOrderId = updatedMetadata.appOrderId as string | undefined;
 
-    let appOrderId = existingAppOrderId;
+    let appOrderId = currentAppOrderId;
 
-    if (!existingAppOrderId && orderData && orderData.userId && orderData.orderType) {
+    if (!currentAppOrderId && orderData && orderData.userId && orderData.orderType) {
       try {
+        console.log(`[VERIFY] Creating Order from verify API (PaymentOrder status: ${isAlreadyProcessed ? orderJson.status : 'paid'})`);
         const createdAppOrder = await createOrderFromPaymentOrderData(updatedOrder, orderData, req.headers.authorization as string);
         if (createdAppOrder && createdAppOrder.id) {
           appOrderId = String(createdAppOrder.id);
         }
       } catch (orderCreateError) {
         const error = orderCreateError as Error;
-        console.error('[VERIFY] Failed to create order immediately:', error.message);
+        console.error('[VERIFY] Failed to create order:', error.message);
         reportError(orderCreateError);
       }
+    } else if (!currentAppOrderId) {
+      console.warn(`[VERIFY] Cannot create Order: ${!orderData ? 'orderData missing' : !orderData.userId ? 'userId missing' : 'orderType missing'}`);
     }
 
     console.log(`Payment verified successfully for order ${body.razorpay_order_id}. ${appOrderId ? `Order ${appOrderId} created.` : 'Order will be created via webhook.'}`);
