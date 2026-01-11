@@ -605,11 +605,8 @@ async function createOrderFromPaymentOrderData(
         deliveryType: orderData.deliveryType
       };
 
-      if (paymentOrderJson.id) {
-        const sanitizedPaymentId = sanitizeUUID(String(paymentOrderJson.id));
-        if (sanitizedPaymentId) {
-          orderDataToCreate.paymentId = sanitizedPaymentId;
-        }
+      if (paymentOrderJson.razorpayOrderId) {
+        orderDataToCreate.paymentId = paymentOrderJson.razorpayOrderId;
       }
 
       createdOrder = await Order.create(orderDataToCreate);
@@ -632,11 +629,12 @@ async function createOrderFromPaymentOrderData(
     } catch (orderCreateError) {
       const error = orderCreateError as Error;
       console.error('[WEBHOOK] [ERROR] Failed to create Order:', error.message);
-      console.error('[WEBHOOK] [ERROR] Order creation data (UUID fields):', {
+      console.error('[WEBHOOK] [ERROR] Order creation data:', {
         userId: orderDataToCreate.userId,
         templeId: orderDataToCreate.templeId,
         addressId: orderDataToCreate.addressId,
         paymentId: orderDataToCreate.paymentId,
+        razorpayOrderId: paymentOrderJson.razorpayOrderId,
         originalUserId: orderData.userId,
         originalTempleId: orderData.templeId,
         originalAddressId: orderData.addressId,

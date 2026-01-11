@@ -61,7 +61,7 @@ export const createOrderValidator: Schema = {
     isIn: { options: [['pending', 'paid', 'failed', 'refunded']], errorMessage: 'Invalid payment status' }
   },
   paymentMethod: { in: 'body', optional: true, isString: { errorMessage: 'paymentMethod must be a string' } },
-  paymentId: { in: 'body', optional: true, isUUID: { errorMessage: 'Payment ID must be a valid UUID' } },
+  paymentId: { in: 'body', optional: true, isString: { errorMessage: 'Payment ID must be a string (Razorpay order ID)' } },
   paidAt: { in: 'body', optional: true, isISO8601: { errorMessage: 'paidAt must be a valid ISO8601 date-time' } },
   trackingNumber: { in: 'body', optional: true, isString: { errorMessage: 'trackingNumber must be a string' } },
   carrier: { in: 'body', optional: true, isString: { errorMessage: 'carrier must be a string' } },
@@ -129,7 +129,7 @@ export const updateOrderValidator: Schema = {
     isIn: { options: [['pending', 'paid', 'failed', 'refunded']], errorMessage: 'Invalid payment status' }
   },
   paymentMethod: { in: 'body', optional: true, isString: { errorMessage: 'paymentMethod must be a string' } },
-  paymentId: { in: 'body', optional: true, isUUID: { errorMessage: 'Payment ID must be a valid UUID' } },
+  paymentId: { in: 'body', optional: true, isString: { errorMessage: 'Payment ID must be a string (Razorpay order ID)' } },
   paidAt: { in: 'body', optional: true, isISO8601: { errorMessage: 'paidAt must be a valid ISO8601 date-time' } },
   trackingNumber: { in: 'body', optional: true, isString: { errorMessage: 'trackingNumber must be a string' } },
   carrier: { in: 'body', optional: true, isString: { errorMessage: 'carrier must be a string' } },

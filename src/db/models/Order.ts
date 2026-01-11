@@ -120,7 +120,7 @@ export class Order extends Model {
   @Column({ type: DataType.STRING, allowNull: true })
   paymentMethod?: string;
 
-  @Column({ type: DataType.UUID, allowNull: true })
+  @Column({ type: DataType.STRING, allowNull: true })
   paymentId?: string;
 
   @Column({ type: DataType.DATE, allowNull: true })

@@ -41,7 +41,7 @@
                 type: string
                 enum: [pending, paid, failed, refunded]
               paymentMethod: { type: string }
-              paymentId: { type: string, format: uuid }
+              paymentId: { type: string, description: 'Razorpay order ID (e.g., order_S2PyZlWSMebvca)' }
               paidAt: { type: string, format: date-time }
               trackingNumber: { type: string }
               carrier: { type: string }
@@ -461,7 +461,7 @@
                 type: string
                 enum: [pending, paid, failed, refunded]
               paymentMethod: { type: string }
-              paymentId: { type: string, format: uuid }
+              paymentId: { type: string, description: 'Razorpay order ID (e.g., order_S2PyZlWSMebvca)' }
               paidAt: { type: string, format: date-time }
               trackingNumber: { type: string }
               carrier: { type: string }
