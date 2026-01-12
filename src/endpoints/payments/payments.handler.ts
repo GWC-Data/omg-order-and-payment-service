@@ -708,18 +708,161 @@ async function createOrderFromPaymentOrderData(
     }
 
     if (createdOrder && orderData.orderType === 'event' && orderData.rudrakshaBookingData) {
+      const createdOrderJson = createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
+      const orderId = String(createdOrderJson.id);
+      const bookingData = orderData.rudrakshaBookingData;
+      
       try {
-        const createdOrderJson = createdOrder.toJSON ? createdOrder.toJSON() : createdOrder;
-        const orderId = String(createdOrderJson.id);
-
         const appcontrolUrl = process.env.APPCONTROL_SERVICE_URL;
         if (appcontrolUrl && orderId) {
+          
+          console.log(`[WEBHOOK] [DEBUG] Creating RudrakshaBooking for Order ${orderId}`);
+          console.log(`[WEBHOOK] [DEBUG] participatingInEvent: ${bookingData.participatingInEvent}`);
+          console.log(`[WEBHOOK] [DEBUG] Raw bookingData.preferredDate:`, bookingData.preferredDate, typeof bookingData.preferredDate);
+          console.log(`[WEBHOOK] [DEBUG] Raw bookingData.preferredTimeSlot:`, bookingData.preferredTimeSlot, typeof bookingData.preferredTimeSlot);
+          console.log(`[WEBHOOK] [DEBUG] Full bookingData:`, JSON.stringify(bookingData, null, 2));
+          
+          // Normalize preferredDate: convert string to array if needed
+          let preferredDate: string[] | undefined;
+          if (bookingData.preferredDate) {
+            if (typeof bookingData.preferredDate === 'string') {
+              // If it's a single date string, convert to array
+              preferredDate = [bookingData.preferredDate.split('T')[0]]; // Remove time if present
+              console.log(`[WEBHOOK] [DEBUG] Converted preferredDate from string to array:`, preferredDate);
+            } else if (Array.isArray(bookingData.preferredDate)) {
+              preferredDate = bookingData.preferredDate.map((date: string) => 
+                typeof date === 'string' ? date.split('T')[0] : date
+              );
+              console.log(`[WEBHOOK] [DEBUG] Normalized preferredDate array:`, preferredDate);
+            } else {
+              console.warn(`[WEBHOOK] [WARN] Unexpected preferredDate type:`, typeof bookingData.preferredDate);
+            }
+          } else {
+            console.warn(`[WEBHOOK] [WARN] preferredDate is missing from bookingData`);
+          }
+          
+          // Normalize preferredTimeSlot: parse JSON string if needed
+          let preferredTimeSlot: Record<string, string | string[]> | undefined;
+          if (bookingData.preferredTimeSlot) {
+            if (typeof bookingData.preferredTimeSlot === 'string') {
+              try {
+                preferredTimeSlot = JSON.parse(bookingData.preferredTimeSlot);
+                console.log(`[WEBHOOK] [DEBUG] Parsed preferredTimeSlot from JSON string:`, preferredTimeSlot);
+              } catch (parseError) {
+                console.error('[WEBHOOK] [ERROR] Failed to parse preferredTimeSlot JSON:', parseError);
+                // If parsing fails, try to construct from preferredDate
+                if (preferredDate && preferredDate.length > 0) {
+                  preferredTimeSlot = { [preferredDate[0]]: bookingData.preferredTimeSlot };
+                  console.log(`[WEBHOOK] [DEBUG] Constructed preferredTimeSlot from preferredDate:`, preferredTimeSlot);
+                }
+              }
+            } else if (typeof bookingData.preferredTimeSlot === 'object' && !Array.isArray(bookingData.preferredTimeSlot)) {
+              preferredTimeSlot = bookingData.preferredTimeSlot as Record<string, string | string[]>;
+              console.log(`[WEBHOOK] [DEBUG] Using preferredTimeSlot as object:`, preferredTimeSlot);
+            } else {
+              console.warn(`[WEBHOOK] [WARN] Unexpected preferredTimeSlot type:`, typeof bookingData.preferredTimeSlot);
+            }
+          } else {
+            console.warn(`[WEBHOOK] [WARN] preferredTimeSlot is missing from bookingData`);
+          }
+          
+          // Extract all dates from preferredTimeSlot if preferredDate is missing
+          if (!preferredDate || preferredDate.length === 0) {
+            if (preferredTimeSlot && typeof preferredTimeSlot === 'object' && !Array.isArray(preferredTimeSlot)) {
+              preferredDate = Object.keys(preferredTimeSlot);
+              console.log(`[WEBHOOK] [DEBUG] Extracted preferredDate from preferredTimeSlot keys:`, preferredDate);
+            } else {
+              console.warn(`[WEBHOOK] [WARN] Cannot extract preferredDate - preferredTimeSlot is not an object`);
+            }
+          }
+          
+          // Normalize numberOfPeople based on members array length
+          // numberOfPeople should be: 1 (main person) + members.length
+          let normalizedNumberOfPeople = bookingData.numberOfPeople;
+          const membersArray = Array.isArray(bookingData.members) ? bookingData.members : [];
+          const actualMemberCount = membersArray.length;
+          const expectedNumberOfPeople = 1 + actualMemberCount;
+          
+          if (normalizedNumberOfPeople !== expectedNumberOfPeople) {
+            console.warn(`[WEBHOOK] [WARN] numberOfPeople mismatch: received ${normalizedNumberOfPeople}, but members array has ${actualMemberCount} members. Normalizing to ${expectedNumberOfPeople}`);
+            normalizedNumberOfPeople = expectedNumberOfPeople;
+          }
+          
+          console.log(`[WEBHOOK] [DEBUG] Members normalization:`, {
+            originalNumberOfPeople: bookingData.numberOfPeople,
+            membersArrayLength: actualMemberCount,
+            normalizedNumberOfPeople: normalizedNumberOfPeople
+          });
+          
+          // Validate required fields when participatingInEvent is true
+          if (bookingData.participatingInEvent) {
+            console.log(`[WEBHOOK] [DEBUG] Validating event participation data...`);
+            
+            if (!preferredDate || preferredDate.length === 0) {
+              const errorMsg = 'preferredDate is required when participatingInEvent is true';
+              console.error(`[WEBHOOK] [ERROR] ${errorMsg}`);
+              console.error(`[WEBHOOK] [ERROR] preferredDate value:`, preferredDate);
+              throw new Error(errorMsg);
+            }
+            
+            if (!preferredTimeSlot || typeof preferredTimeSlot !== 'object' || Array.isArray(preferredTimeSlot)) {
+              const errorMsg = 'preferredTimeSlot is required when participatingInEvent is true';
+              console.error(`[WEBHOOK] [ERROR] ${errorMsg}`);
+              console.error(`[WEBHOOK] [ERROR] preferredTimeSlot value:`, preferredTimeSlot, typeof preferredTimeSlot);
+              throw new Error(errorMsg);
+            }
+            
+            // Validate that all dates in preferredDate have entries in preferredTimeSlot
+            const missingDates = preferredDate.filter(date => {
+              const hasSlot = preferredTimeSlot[date] !== undefined && preferredTimeSlot[date] !== null;
+              if (!hasSlot) {
+                console.warn(`[WEBHOOK] [WARN] Missing time slot for date: ${date}`);
+              }
+              return !hasSlot;
+            });
+            
+            if (missingDates.length > 0) {
+              const errorMsg = `preferredTimeSlot must have entries for all dates: ${missingDates.join(', ')}`;
+              console.error(`[WEBHOOK] [ERROR] ${errorMsg}`);
+              console.error(`[WEBHOOK] [ERROR] Available dates in preferredTimeSlot:`, Object.keys(preferredTimeSlot));
+              throw new Error(errorMsg);
+            }
+            
+            console.log(`[WEBHOOK] [DEBUG] Event participation validation passed`);
+          } else {
+            console.log(`[WEBHOOK] [DEBUG] participatingInEvent is false - skipping event validation`);
+          }
+          
           const bookingPayload = {
-            ...orderData.rudrakshaBookingData,
+            ...bookingData,
+            preferredDate,
+            preferredTimeSlot,
+            numberOfPeople: normalizedNumberOfPeople,
+            // Ensure members is an array (even if empty)
+            members: membersArray,
             orderId: orderId
           };
 
-          await request({
+          console.log(`[WEBHOOK] [DEBUG] Final bookingPayload (summary):`, {
+            userId: bookingPayload.userId,
+            participatingInEvent: bookingPayload.participatingInEvent,
+            preferredDate: bookingPayload.preferredDate,
+            preferredDateType: Array.isArray(bookingPayload.preferredDate) ? 'array' : typeof bookingPayload.preferredDate,
+            preferredTimeSlot: bookingPayload.preferredTimeSlot,
+            preferredTimeSlotType: typeof bookingPayload.preferredTimeSlot,
+            preferredTimeSlotKeys: bookingPayload.preferredTimeSlot && typeof bookingPayload.preferredTimeSlot === 'object' 
+              ? Object.keys(bookingPayload.preferredTimeSlot) 
+              : 'N/A',
+            numberOfPeople: bookingPayload.numberOfPeople,
+            rudrakshaQuantity: bookingPayload.rudrakshaQuantity,
+            orderId: bookingPayload.orderId,
+            hasMembers: !!bookingPayload.members,
+            membersCount: bookingPayload.members?.length || 0
+          });
+
+          console.log(`[WEBHOOK] [DEBUG] Sending booking request to: ${appcontrolUrl}/launch-event/rudraksha-booking`);
+          
+          const bookingResponse = await request({
             method: 'POST',
             url: `${appcontrolUrl}/launch-event/rudraksha-booking`,
             headers: {
@@ -731,12 +874,56 @@ async function createOrderFromPaymentOrderData(
           });
 
           console.log(`[WEBHOOK] [SUCCESS] Created RudrakshaBooking for Order ${orderId}`);
+          console.log(`[WEBHOOK] [DEBUG] Booking API response status:`, bookingResponse?.status || 'unknown');
+          console.log(`[WEBHOOK] [DEBUG] Booking API response statusText:`, bookingResponse?.statusText || 'unknown');
+          
+          if (bookingResponse?.data) {
+            const responseData = bookingResponse.data as any;
+            console.log(`[WEBHOOK] [DEBUG] Booking API response data (summary):`, {
+              success: responseData.success,
+              message: responseData.message,
+              hasBooking: !!responseData.data?.booking,
+              bookingId: responseData.data?.booking?.id
+            });
+          } else {
+            console.warn(`[WEBHOOK] [WARN] No response data from booking API`);
+          }
         } else {
           console.warn('[WEBHOOK] [WARN] APPCONTROL_SERVICE_URL not configured; skipping RudrakshaBooking creation');
         }
       } catch (bookingError) {
-        console.error('[WEBHOOK] [ERROR] Failed to create RudrakshaBooking:', bookingError);
+        const error = bookingError as any;
+        console.error('[WEBHOOK] [ERROR] Failed to create RudrakshaBooking for Order:', orderId);
+        console.error('[WEBHOOK] [ERROR] Error message:', error?.message || 'Unknown error');
+        console.error('[WEBHOOK] [ERROR] Error stack:', error?.stack);
+        console.error('[WEBHOOK] [ERROR] Error details:', {
+          message: error?.message,
+          name: error?.name,
+          code: error?.code,
+          response: error?.response?.data,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          config: error?.config ? {
+            url: error.config.url,
+            method: error.config.method,
+            data: error.config.data ? JSON.stringify(error.config.data).substring(0, 500) : 'no data'
+          } : 'no config'
+        });
+        
+        // Log the payload that failed for debugging
+        if (bookingData) {
+          console.error('[WEBHOOK] [ERROR] Failed payload summary:', {
+            participatingInEvent: bookingData.participatingInEvent,
+            preferredDate: bookingData.preferredDate,
+            preferredTimeSlot: bookingData.preferredTimeSlot,
+            userId: bookingData.userId,
+            phoneNumber: bookingData.phoneNumber
+          });
+        }
+        
         reportError(bookingError);
+        // Don't throw - allow order creation to succeed even if booking creation fails
+        // The booking can be created later via admin or retry mechanism
       }
     }
 
