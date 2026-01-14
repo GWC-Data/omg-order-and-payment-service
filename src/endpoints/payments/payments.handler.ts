@@ -277,13 +277,25 @@ export const verifyPaymentSignatureHandler: EndpointHandler<
     const metadata = (orderJson.metadata as Record<string, unknown> | undefined) ?? {};
     const existingAppOrderId = metadata.appOrderId as string | undefined;
 
+    // Check for payment ID mismatch only if the existing payment was successful
+    // Allow retry if previous payment failed (e.g., insufficient funds)
     if (
       orderJson.razorpayPaymentId &&
-      orderJson.razorpayPaymentId !== body.razorpay_payment_id
+      orderJson.razorpayPaymentId !== body.razorpay_payment_id &&
+      (orderJson.status === 'paid' || orderJson.status === 'captured')
     ) {
-      console.warn(`Payment ID mismatch for order ${body.razorpay_order_id}: existing ${orderJson.razorpayPaymentId}, received ${body.razorpay_payment_id}`);
+      console.warn(`Payment ID mismatch for order ${body.razorpay_order_id}: existing ${orderJson.razorpayPaymentId} (status: ${orderJson.status}), received ${body.razorpay_payment_id}`);
       res.status(409).json({ message: PAYMENT_ORDER_ALREADY_PROCESSED });
       return;
+    }
+
+    // If previous payment failed, log that we're processing a retry
+    if (
+      orderJson.razorpayPaymentId &&
+      orderJson.razorpayPaymentId !== body.razorpay_payment_id &&
+      orderJson.status === 'failed'
+    ) {
+      console.log(`[VERIFY] Processing retry payment for order ${body.razorpay_order_id}: previous payment ${orderJson.razorpayPaymentId} failed (${orderJson.failureReason || 'unknown reason'}), new payment ${body.razorpay_payment_id}`);
     }
 
     if (!body.userId) {
